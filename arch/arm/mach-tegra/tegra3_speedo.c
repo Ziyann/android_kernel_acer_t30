@@ -143,6 +143,13 @@ int orig_cpu_speedo_id;
 int orig_soc_speedo_id;
 #endif
 
+#ifdef CONFIG_TEGRA_VARIANT_INFO
+int orig_cpu_process_id;
+int orig_core_process_id;
+int orig_cpu_speedo_id;
+int orig_soc_speedo_id;
+#endif
+
 static void fuse_speedo_calib(u32 *speedo_g, u32 *speedo_lp)
 {
 	u32 reg;
