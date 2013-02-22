@@ -521,6 +521,13 @@ config TEGRA_GAMING_FIX
 	default n
 	help
 	  Tegra3 Quadcore Gaming Fix
+	  
+config DEFAULT_DUAL_CORE
+	bool "Default to Dual-Core"
+	depends on TEGRA_SILICON_PLATFORM
+	default n
+	help
+	  Set the default maximum number of cores to 2 instead of 4.
 
 config TEGRA_GPU_OVERCLOCK
 	bool "Tegra3 GPU Overclocking"
