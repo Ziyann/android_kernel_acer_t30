@@ -134,6 +134,14 @@ config MACH_PICASSO_E2
 	help
 	  Support for Acer Picasso E2 Tablet
 
+config TEGRA_AHB
+	bool "Enable AHB driver for NVIDIA Tegra SoCs"
+	default y
+	help
+	  Adds AHB configuration functionality for NVIDIA Tegra SoCs,
+	  which controls AHB bus master arbitration and some
+	  perfomance parameters(priority, prefech size).
+
 comment "Tegra board type"
 
 config MACH_HARMONY
