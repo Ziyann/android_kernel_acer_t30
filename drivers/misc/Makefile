@@ -62,3 +62,4 @@ obj-$(CONFIG_MAX1749_VIBRATOR)	+= max1749.o
 obj-$(CONFIG_THERM_EST)		+= therm_est.o
 obj-$(CONFIG_TEGRA_THROUGHPUT)	+= tegra-throughput.o
 obj-$(CONFIG_STK2203_LIGHT_SENSOR)	+= stk2203.o
+obj-y += mako_hotplug_control.o
