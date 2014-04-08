@@ -4920,6 +4920,7 @@ static int clip_cpu_rate_limits(
 	//pr_info("CPU Freq LP Index: %i\n", idx);
 
 #ifdef CONFIG_TEGRA3_LP_CORE_OVERDRIVE
+    /* force idx for max LP*/
 	idx = 5;
 #endif
 	cpu_clk_lp->max_rate = freq_table[idx].frequency * 1000;
