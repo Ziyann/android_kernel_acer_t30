@@ -136,14 +136,8 @@ config DEFAULT_IOSCHED
 	default "cfq" if DEFAULT_CFQ
 	default "bfq" if DEFAULT_BFQ
 	default "sio" if DEFAULT_SIO
-<<<<<<< HEAD
 	default "noop" if DEFAULT_NOOP
-
-||||||| parent of b0339c8... Added V(R) I/O Scheduler
-
-=======
 	default "vr" if DEFAULT_VR
->>>>>>> b0339c8... Added V(R) I/O Scheduler
 endmenu
 
 endif
