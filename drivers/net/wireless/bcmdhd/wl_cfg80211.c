@@ -3544,12 +3544,11 @@ wl_cfg80211_mgmt_tx(struct wiphy *wiphy, struct net_device *ndev,
 	u64 *cookie)
 {
 	wl_action_frame_t *action_frame;
-	wl_af_params_t *af_params;
-	wifi_p2p_ie_t *p2p_ie;
-	wpa_ie_fixed_t *wps_ie;
-	wifi_wfd_ie_t *wfd_ie;
-	scb_val_t scb_val;
-	wifi_wfd_ie_t *wfd_ie;
+    wl_af_params_t *af_params;
+    wifi_p2p_ie_t *p2p_ie;
+    wpa_ie_fixed_t *wps_ie;
+    scb_val_t scb_val;
+    wifi_wfd_ie_t *wfd_ie;
 	const struct ieee80211_mgmt *mgmt;
 	struct wl_priv *wl = wiphy_priv(wiphy);
 	struct net_device *dev = NULL;

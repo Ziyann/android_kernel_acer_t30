@@ -33,7 +33,6 @@ extern u32 wl_dbg_level;
 
 typedef struct wifi_p2p_ie wifi_wfd_ie_t;
 
->>>>>>> 5bfb83a... net: wireless: bcmdhd: Update to Version 5.90.195.98
 /* Enumeration of the usages of the BSSCFGs used by the P2P Library.  Do not
  * confuse this with a bsscfg index.  This value is an index into the
  * saved_ie[] array of structures which in turn contains a bsscfg index field.

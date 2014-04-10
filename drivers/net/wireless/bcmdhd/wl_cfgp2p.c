@@ -1113,6 +1113,7 @@ wl_cfgp2p_find_p2pie(u8 *parse, u32 len)
 	}
 	return NULL;
 }
+
 wifi_wfd_ie_t *
 wl_cfgp2p_find_wfdie(u8 *parse, u32 len)
 {
@@ -1120,19 +1121,6 @@ wl_cfgp2p_find_wfdie(u8 *parse, u32 len)
 
 	while ((ie = bcm_parse_tlvs(parse, (int)len, DOT11_MNG_VS_ID))) {
 	if (wl_cfgp2p_is_wfd_ie((uint8*)ie, &parse, &len)) {
-			return (wifi_wfd_ie_t *)ie;
-		}
-	}
-	return NULL;
-}
-
-wifi_wfd_ie_t *
-wl_cfgp2p_find_wfdie(u8 *parse, u32 len)
-{
-	bcm_tlv_t *ie;
-
-	while ((ie = bcm_parse_tlvs(parse, (int)len, DOT11_MNG_VS_ID))) {
-		if (wl_cfgp2p_is_wfd_ie((uint8*)ie, &parse, &len)) {
 			return (wifi_wfd_ie_t *)ie;
 		}
 	}
