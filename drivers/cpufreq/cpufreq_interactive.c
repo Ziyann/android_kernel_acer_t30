@@ -1166,10 +1166,6 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 
 		rc = sysfs_create_group(cpufreq_global_kobject,
 				&interactive_attr_group);
-		interactive_kobj = kobject_create_and_add(
-					"gov_interactive",
-					cpufreq_global_kobject);
-		kobject_uevent(interactive_kobj, KOBJ_ADD);
 		if (rc) {
 			mutex_unlock(&gov_lock);
 			return rc;
@@ -1210,8 +1206,6 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 		input_unregister_handler(&cpufreq_interactive_input_handler);
 		sysfs_remove_group(cpufreq_global_kobject,
 				&interactive_attr_group);
-		kobject_uevent(interactive_kobj, KOBJ_REMOVE);
-		kobject_put(interactive_kobj);
 		mutex_unlock(&gov_lock);
 
 		break;
