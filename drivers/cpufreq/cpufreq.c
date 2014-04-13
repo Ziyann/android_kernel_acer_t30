@@ -643,7 +643,7 @@ static ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
 	return out - buf;
 }
 
-static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf, size_t count)
+static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, char *buf, size_t count)
 {
 	int i = 0;
 	unsigned long volt_cur;
@@ -980,7 +980,6 @@ static struct attribute *default_attrs[] = {
 	&cpuinfo_max_freq.attr,
 	&cpuinfo_transition_latency.attr,
 	&scaling_min_freq.attr,
-    &gpu_oc.attr,
 	&scaling_max_freq.attr,
 	&affected_cpus.attr,
 	&related_cpus.attr,
@@ -990,6 +989,7 @@ static struct attribute *default_attrs[] = {
 	&scaling_setspeed.attr,
 	&dvfs_test.attr,
 	&policy_min_freq.attr,
+	&gpu_oc.attr,
 	&policy_max_freq.attr,
 #ifdef CONFIG_VOLTAGE_CONTROL
 	&UV_mV_table.attr,
