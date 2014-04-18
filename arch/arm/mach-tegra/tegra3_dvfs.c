@@ -596,6 +596,7 @@ static int __init get_cpu_nominal_mv_index(
 	 * result to the nominal cpu level for the chips with this speedo_id.
 	 */
 	mv = tegra3_dvfs_rail_vdd_core.nominal_millivolts;
+	printk("tegra3_speedo: tegra3_dvfs_rail_vdd_core.nominal_millivolts mV for cpu_speedo_id:%u is %umV\n",speedo_id,mv);
 	for (i = 0; i < MAX_DVFS_FREQS; i++) {
 		if ((cpu_millivolts[i] == 0) ||
 		    tegra3_get_core_floor_mv(cpu_millivolts[i]) > mv)
@@ -607,6 +608,8 @@ static int __init get_cpu_nominal_mv_index(
 	BUG_ON(mv < tegra3_dvfs_rail_vdd_cpu.min_millivolts);
 	mv = min(mv, tegra_cpu_speedo_mv());
 	pr_info("cpu_nominal_mv_min: %i\n", mv);
+	
+	printk("tegra3_speedo: nominal mV for cpu_speedo_id:%u is %umV",speedo_id,mv);
 
 	/*
 	 * Find matching cpu dvfs entry, and use it to determine index to the
