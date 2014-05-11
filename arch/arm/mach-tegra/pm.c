@@ -515,10 +515,10 @@ static void tegra_sleep_core(enum tegra_suspend_mode mode,
 {
 #ifdef CONFIG_TRUSTED_FOUNDATIONS
 	if (mode == TEGRA_SUSPEND_LP0) {
-		tegra_generic_smc_uncached(0xFFFFFFFC, 0xFFFFFFE3,
+		tegra_generic_smc(0xFFFFFFFC, 0xFFFFFFE3,
 					   virt_to_phys(tegra_resume));
 	} else {
-		tegra_generic_smc_uncached(0xFFFFFFFC, 0xFFFFFFE6,
+		tegra_generic_smc(0xFFFFFFFC, 0xFFFFFFE6,
 					   (TEGRA_RESET_HANDLER_BASE +
 					    tegra_cpu_reset_handler_offset));
 	}
@@ -533,7 +533,7 @@ static void tegra_sleep_core(enum tegra_suspend_mode mode,
 static inline void tegra_sleep_cpu(unsigned long v2p)
 {
 #ifdef CONFIG_TRUSTED_FOUNDATIONS
-	tegra_generic_smc_uncached(0xFFFFFFFC, 0xFFFFFFE4,
+	tegra_generic_smc(0xFFFFFFFC, 0xFFFFFFE4,
 				   (TEGRA_RESET_HANDLER_BASE +
 				    tegra_cpu_reset_handler_offset));
 #endif

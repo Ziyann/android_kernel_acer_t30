@@ -271,7 +271,7 @@ static inline void tegra_l2x0_disable_tz(void)
 	}
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
 	/* flush all ways on disable */
-	tegra_generic_smc_uncached(0xFFFFF100, 0x00000002, l2x0_way_mask);
+	tegra_generic_smc(0xFFFFF100, 0x00000002, l2x0_way_mask);
 #elif defined(CONFIG_ARCH_TEGRA_3x_SOC)
 	if (tegra_is_cpu_in_lp2(0)) {
 		register unsigned long sp asm ("sp");
@@ -281,10 +281,10 @@ static inline void tegra_l2x0_disable_tz(void)
 		outer_flush_range(__pa(sp), __pa(sp) + (CACHE_LINE_SIZE * 2));
 
 		/* pass zero arg, so secureos flushes only its workspace */
-		tegra_generic_smc_uncached(0xFFFFF100, 0x00000002, 0x0);
+		tegra_generic_smc(0xFFFFF100, 0x00000002, 0x0);
 	} else {
 		/* flush all ways on disable, if entering LP0/LP1 */
-		tegra_generic_smc_uncached(0xFFFFF100,
+		tegra_generic_smc(0xFFFFF100,
 						0x00000002, l2x0_way_mask);
 	}
 #endif
@@ -310,7 +310,7 @@ static inline void tegra_init_cache_tz(bool init)
 	} else {
 		/* reenable L2 in secureos */
 		aux_ctrl = readl_relaxed(p + L2X0_AUX_CTRL);
-		tegra_generic_smc_uncached(0xFFFFF100, 0x00000004, aux_ctrl);
+		tegra_generic_smc(0xFFFFF100, 0x00000004, aux_ctrl);
 	}
 }
 #endif	/* CONFIG_TRUSTED_FOUNDATIONS  */
