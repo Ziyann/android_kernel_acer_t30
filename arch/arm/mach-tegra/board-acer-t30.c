@@ -39,6 +39,7 @@
 #include <linux/spi-tegra.h>
 #include <linux/rfkill-gpio.h>
 
+
 #include <sound/wm8903.h>
 
 #include <mach/clk.h>
@@ -57,6 +58,8 @@
 #include <mach/thermal.h>
 #include <mach/pci.h>
 #include <mach/tegra_fiq_debugger.h>
+#include <linux/thermal.h>
+
 #ifdef CONFIG_ROTATELOCK
 #include <linux/switch.h>
 #endif
@@ -103,7 +106,9 @@ void gpio_unused_init(void);
 
 static struct balanced_throttle throttle_list[] = {
 	{
-		.id = BALANCED_THROTTLE_ID_TJ,
+		.tegra_cdev = {
+			.id = CDEV_BTHROT_ID_TJ,
+		},
 		.throt_tab_size = 10,
 		.throt_tab = {
 			{      0, 1000 },
@@ -120,7 +125,9 @@ static struct balanced_throttle throttle_list[] = {
 	},
 #ifdef CONFIG_TEGRA_SKIN_THROTTLE
 	{
-		.id = BALANCED_THROTTLE_ID_SKIN,
+		.tegra_cdev = {
+			.id = CDEV_BTHROT_ID_SKIN,
+		},
 		.throt_tab_size = 6,
 		.throt_tab = {
 			{ 640000, 1200 },
@@ -136,27 +143,49 @@ static struct balanced_throttle throttle_list[] = {
 
 /* All units are in millicelsius */
 static struct tegra_thermal_data thermal_data = {
-	.shutdown_device_id = THERMAL_DEVICE_ID_NCT_EXT,
-	.temp_shutdown = 90000,
-
 	.throttle_edp_device_id = THERMAL_DEVICE_ID_NCT_EXT,
 #ifdef CONFIG_TEGRA_EDP_LIMITS
 	.edp_offset = TDIODE_OFFSET,  /* edp based on tdiode */
 	.hysteresis_edp = 3000,
 #endif
 	.temp_throttle = 85000,
-	.tc1 = 0,
-	.tc2 = 1,
-	.passive_delay = 2000,
+	.binds = {
+		/* Thermal Throttling */
+		{
+			.tdev_id = THERMAL_DEVICE_ID_NCT_EXT,
+			.cdev_id = CDEV_BTHROT_ID_TJ,
+			.type = THERMAL_TRIP_PASSIVE,
+			.passive = {
+				.trip_temp = 85000,
+				.tc1 = 0,
+				.tc2 = 1,
+				.passive_delay = 2000,
+			}
+		},
+#ifdef CONFIG_TEGRA_SKIN_THROTTLE
+		/* Skin Thermal Throttling */
+		{
+			.tdev_id = THERMAL_DEVICE_ID_SKIN,
+			.cdev_id = CDEV_BTHROT_ID_SKIN,
+			.type = THERMAL_TRIP_PASSIVE,
+			.passive = {
+				.trip_temp = 43000,
+				.tc1 = 10,
+				.tc2 = 1,
+				.passive_delay = 15000,
+			}
+		},
+#endif
+		{
+			.tdev_id = THERMAL_DEVICE_ID_NULL,
+		},
+	},
 };
 
 static struct tegra_skin_data skin_data = {
 #ifdef CONFIG_TEGRA_SKIN_THROTTLE
-	.skin_device_id = THERMAL_DEVICE_ID_SKIN,
+	.skin_device_id = THERMAL_DEVICE_ID_THERM_EST_SKIN,
 	.temp_throttle_skin = 43000,
-	.tc1_skin = 0,
-	.tc2_skin = 1,
-	.passive_delay_skin = 5000,
 	.skin_temp_offset = 9793,
 	.skin_period = 1100,
 	.skin_devs_size = 2,
