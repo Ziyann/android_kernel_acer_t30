@@ -976,10 +976,14 @@ static struct balanced_throttle tj_throttle = {
 	.throt_tab = tj_throttle_table,
 };
 
-static struct thermal_cooling_device *cardhu_create_cdev(void *data)
+static int __init cardhu_throttle_init(void)
 {
-	return balanced_throttle_register(&tj_throttle, "cardhu-nct");
+	//if (machine_is_cardhu())
+		balanced_throttle_register(&tj_throttle, "cardhu-nct");
+		
+	return 0;
 }
+module_init(cardhu_throttle_init);
 
 static struct nct1008_platform_data cardhu_nct1008_pdata = {
 	.supported_hwrev = true,
@@ -991,7 +995,8 @@ static struct nct1008_platform_data cardhu_nct1008_pdata = {
 
 	/* Thermal Throttling */
 	.passive = {
-		.create_cdev = cardhu_create_cdev,
+		.enable = true,
+		.type = "cardhu-nct",
 		.trip_temp = 85000,
 		.tc1 = 0,
 		.tc2 = 1,
