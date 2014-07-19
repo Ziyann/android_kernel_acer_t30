@@ -168,6 +168,13 @@ enum tegra_pullupdown {
 	TEGRA_PUPD_PULL_UP,
 };
 
+#if defined(CONFIG_ARCH_ACER_T30)
+enum tegra_e_input {
+	TEGRA_E_INPUT_DISABLE = 0,
+	TEGRA_E_INPUT_ENABLE,
+};
+#endif
+
 enum tegra_tristate {
 	TEGRA_TRI_NORMAL = 0,
 	TEGRA_TRI_TRISTATE = 1,
