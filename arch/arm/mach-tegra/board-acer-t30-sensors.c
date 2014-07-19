@@ -993,15 +993,19 @@ static struct nct1008_platform_data cardhu_nct1008_pdata = {
 	.shutdown_ext_limit = 90,
 	.shutdown_local_limit = 90,
 
-	/* Thermal Throttling */
-	.passive = {
-		.enable = true,
-		.type = "cardhu-nct",
-		.trip_temp = 85000,
-		.tc1 = 0,
-		.tc2 = 1,
-		.passive_delay = 2000,
-	}	
+	.passive_delay = 2000,
+
+	.num_trips = 1,
+	.trips = {
+		/* Thermal Throttling */
+		[0] = {
+			.cdev_type = "cardhu-nct",
+			.trip_temp = 80000,
+			.trip_type = THERMAL_TRIP_PASSIVE,
+			.state = THERMAL_NO_LIMIT,
+			.hysteresis = 0,
+		},
+	},
 };
 
 static struct i2c_board_info cardhu_i2c4_nct1008_board_info[] = {
