@@ -681,8 +681,10 @@ static struct tegra_asoc_platform_data cardhu_audio_wm8903_pdata = {
 	.gpio_hp_mute		= -1,
 	.gpio_int_mic_en	= -1,
 	.gpio_ext_mic_en	= -1,
+#if 0
 	.gpio_bypass_switch_en	= TEGRA_GPIO_BYPASS_SWITCH_EN,
 	.gpio_debug_switch_en   = TEGRA_GPIO_DEBUG_SWITCH_EN,
+#endif
 	.i2s_param[HIFI_CODEC]  = {
 		.audio_port_id  = 0,
 		.is_i2s_master  = 1,
