@@ -59,6 +59,7 @@
 #include <mach/usb_phy.h>
 #include <mach/pci.h>
 #include <mach/tegra_fiq_debugger.h>
+#include <mach/gpio-tegra.h>
 
 #ifdef CONFIG_ROTATELOCK
 #include <linux/switch.h>
@@ -71,6 +72,7 @@
 #endif
 
 #include "board.h"
+#include "board-common.h"
 #include "clock.h"
 #include "board-acer-t30.h"
 #include "devices.h"
@@ -605,8 +607,6 @@ static struct tegra_asoc_platform_data cardhu_audio_wm8903_pdata = {
 	.gpio_hp_mute		= -1,
 	.gpio_int_mic_en	= -1,
 	.gpio_ext_mic_en	= -1,
-	.gpio_bypass_switch_en	= TEGRA_GPIO_BYPASS_SWITCH_EN,
-	.gpio_debug_switch_en   = TEGRA_GPIO_DEBUG_SWITCH_EN,
 	.i2s_param[HIFI_CODEC]  = {
 		.audio_port_id  = 0,
 		.is_i2s_master  = 1,
