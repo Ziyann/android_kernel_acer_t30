@@ -356,9 +356,9 @@ static struct wm8903_platform_data cardhu_wm8903_pdata = {
 	.gpio_cfg = {
 		0,
 		0,
+		WM8903_GPIO_CONFIG_ZERO,
 		0,
-		WM8903_GPIO_NO_CONFIG,
-		WM8903_GPIO_NO_CONFIG,
+		0,
 	},
 };
 
