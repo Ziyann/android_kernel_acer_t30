@@ -484,6 +484,10 @@ int tegra_pinmux_set_io(int pg, enum tegra_pin_io input);
 int tegra_pinmux_get_pingroup(int gpio_nr);
 int tegra_pinmux_set_pullupdown(int pg, enum tegra_pullupdown pupd);
 
+#if defined(CONFIG_ARCH_ACER_T30)
+int tegra_pinmux_set_e_input_bit(int pg,
+	enum tegra_e_input e_input);
+#endif
 void tegra_pinmux_config_table(const struct tegra_pingroup_config *config,
 	int len);
 
