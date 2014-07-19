@@ -1265,9 +1265,6 @@ int __init cardhu_sensors_init(void)
 	if (err)
 		return err;
 
-	i2c_register_board_info(4, cardhu_i2c4_nct1008_board_info,
-		ARRAY_SIZE(cardhu_i2c4_nct1008_board_info));
-
 #ifdef CONFIG_MPU_SENSORS_MPU3050
 	mpu3050_i2c0_boardinfo[0].irq = gpio_to_irq(GYRO_INT_R);
 	i2c_register_board_info(0, mpu3050_i2c0_boardinfo,
