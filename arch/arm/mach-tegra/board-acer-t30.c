@@ -1019,18 +1019,6 @@ static void acer_board_info(void) {
 		pr_info("Wifi module: NH660");
 }
 
-/* This needs to be inialized later hand */
-static int __init cardhu_throttle_list_init(void)
-{
-	int i;
-	for (i = 0; i < ARRAY_SIZE(throttle_list); i++)
-		if (balanced_throttle_register(&throttle_list[i]))
-			return -ENODEV;
-
-	return 0;
-}
-late_initcall(cardhu_throttle_list_init);
-
 extern void tegra_booting_info(void);
 static void __init tegra_cardhu_init(void)
 {
