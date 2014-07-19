@@ -16,9 +16,13 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/gpio.h>
 #include <mach/pinmux.h>
+#include <mach/pinmux-tegra30.h>
+#include <mach/gpio-tegra.h>
 #include "board.h"
 #include "board-acer-t30.h"
+#include "devices.h"
 #include "gpio-names.h"
 
 extern int acer_board_id;
@@ -448,6 +452,8 @@ int __init cardhu_gpio_init(void)
 
 int __init cardhu_pinmux_init(void)
 {
+	tegra30_default_pinmux();
+
     /* common pinmux connfiguration */
 	switch (acer_board_type) {
 	case BOARD_PICASSO_2:

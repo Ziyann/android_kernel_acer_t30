@@ -1002,6 +1002,7 @@ extern void tegra_booting_info(void);
 static void __init tegra_cardhu_init(void)
 {
 	tegra_clk_init_from_table(cardhu_clk_init_table);
+	tegra_enable_pinmux();
 	tegra_soc_device_init("acer-t30");
 	cardhu_pinmux_init();
 	cardhu_gpio_init();
