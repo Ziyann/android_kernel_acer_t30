@@ -238,7 +238,7 @@ static noinline void __init cardhu_setup_bluesleep(void)
 	cardhu_bluesleep_device.resource[2].start = gpio_to_irq(TEGRA_GPIO_PS7);
 	cardhu_bluesleep_device.resource[2].end = gpio_to_irq(TEGRA_GPIO_PS7);
 	platform_device_register(&cardhu_bluesleep_device);
-	bluesleep_setup_uart_port(&tegra_uartc_device);
+	//bluesleep_setup_uart_port(&tegra_uartc_device);
 	bt_ext_gpio_init();
 
 	return;
