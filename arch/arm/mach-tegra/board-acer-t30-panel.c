@@ -309,7 +309,7 @@ static struct tegra_dc_sd_settings acer_sd_settings = {
 			},
 		},
 	.sd_brightness = &sd_brightness,
-	.bl_device = &acer_backlight_device,
+	.bl_device_name = "pwm-backlight",
 };
 /* DISPLAY PICASSO 2 */
 static struct tegra_dc_mode acer_p2_panel_modes[] = {
