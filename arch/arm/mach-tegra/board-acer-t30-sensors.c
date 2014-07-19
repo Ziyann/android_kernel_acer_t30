@@ -60,9 +60,15 @@
 #define STK_INTR TEGRA_GPIO_PX3
 #endif
 
+#ifdef CONFIG_VIDEO_OV5640
 #include <media/ov5640.h>
+#endif
+#ifdef CONFIG_VIDEO_OV9740
 #include <media/ov9740.h>
+#endif
+#ifdef CONFIG_VIDEO_YUV
 #include <media/yuv_sensor.h>
+#endif
 
 static struct board_info board_info;
 
