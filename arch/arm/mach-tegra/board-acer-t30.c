@@ -1063,6 +1063,7 @@ static void __init tegra_cardhu_init(void)
 #endif
 	tegra_serial_debug_init(TEGRA_UARTD_BASE, INT_WDT_CPU, NULL, -1, -1);
 	acer_board_info();
+	tegra_register_fuse();
 }
 
 static void __init tegra_cardhu_reserve(void)
