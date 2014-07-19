@@ -958,20 +958,22 @@ static void cardhu_stk2203_init(void)
 }
 #endif
 
+static struct throttle_table tj_throttle_table[] = {
+	{ 0, 1000 },
+	{ 640000, 1000 },
+	{ 640000, 1000 },
+	{ 640000, 1000 },
+	{ 640000, 1000 },
+	{ 640000, 1000 },
+	{ 760000, 1000 },
+	{ 760000, 1050 },
+	{1000000, 1050 },
+	{1000000, 1100 },
+};
+
 static struct balanced_throttle tj_throttle = {
-	.throt_tab_size = 10,
-	.throt_tab = {
-		{ 0, 1000 },
-		{ 640000, 1000 },
-		{ 640000, 1000 },
-		{ 640000, 1000 },
-		{ 640000, 1000 },
-		{ 640000, 1000 },
-		{ 760000, 1000 },
-		{ 760000, 1050 },
-		{1000000, 1050 },
-		{1000000, 1100 },
-	},
+	.throt_tab_size = ARRAY_SIZE(tj_throttle_table),
+	.throt_tab = tj_throttle_table,
 };
 
 static struct nct1008_platform_data cardhu_nct1008_pdata = {
