@@ -51,7 +51,7 @@ static int acer_backlight_init(struct device *dev)
 	/* TBR: disable gpio to  change function pin */
 	tegra_gpio_disable(BL_PWM);
 	INIT_DELAYED_WORK(&bl_en_gpio,acer_backlight_work_queue);
-	return 0;
+	return 1;
 }
 
 static void acer_backlight_exit(struct device *dev)
@@ -107,7 +107,7 @@ static struct platform_device acer_backlight_device = {
 	},
 };
 
-static int acer_panel_enable(void)
+static int acer_panel_enable(struct device *dev)
 {
 	gpio_set_value(LCD_VDD,1);
 	udelay(400);
@@ -131,7 +131,7 @@ static int acer_panel_disable(void)
 
 #if defined(CONFIG_TEGRA_HDMI)
 #if !HDMI_5V_ALWAYS_ON
-static int acer_hdmi_vddio_enable(void)
+static int acer_hdmi_vddio_enable(struct device *dev)
 {
 	int err;
 	err = gpio_direction_output(HDMI_5V, 1);
@@ -152,11 +152,11 @@ static int acer_hdmi_vddio_disable(void)
 }
 #endif
 
-static int acer_hdmi_enable(void)
+static int acer_hdmi_enable(struct device *dev)
 {
 	int ret;
 	if (!acer_hdmi_reg) {
-		acer_hdmi_reg = regulator_get(NULL, "avdd_hdmi");
+		acer_hdmi_reg = regulator_get(dev, "avdd_hdmi");
 		if (IS_ERR_OR_NULL(acer_hdmi_reg)) {
 			pr_err("[hdmi]: couldn't get regulator avdd_hdmi\n");
 			acer_hdmi_reg = NULL;
@@ -316,7 +316,7 @@ static struct tegra_dc_sd_settings acer_sd_settings = {
 			},
 		},
 	.sd_brightness = &sd_brightness,
-	.bl_device = &acer_backlight_device,
+	.bl_device_name = "pwm-backlight",
 };
 /* DISPLAY PICASSO 2 */
 static struct tegra_dc_mode acer_p2_panel_modes[] = {
@@ -366,7 +366,7 @@ static struct tegra_dc_platform_data acer_p2_disp1_pdata = {
 	.fb             = &acer_p2_fb_data,
 };
 
-static struct nvhost_device acer_p2_disp1_device = {
+static struct platform_device acer_p2_disp1_device = {
 	.name           = "tegradc",
 	.id             = 0,
 	.resource       = acer_disp1_resources,
@@ -425,7 +425,7 @@ static struct tegra_dc_platform_data acer_pm_disp1_pdata = {
 	.fb             = &acer_pm_fb_data,
 };
 
-static struct nvhost_device acer_pm_disp1_device = {
+static struct platform_device acer_pm_disp1_device = {
 	.name           = "tegradc",
 	.id             = 0,
 	.resource       = acer_disp1_resources,
@@ -498,7 +498,7 @@ static struct tegra_dc_platform_data acer_disp2_pdata = {
 	.emc_clk_rate   = 300000000,
 };
 
-static struct nvhost_device acer_disp2_device = {
+static struct platform_device acer_disp2_device = {
 	.name           = "tegradc",
 	.id             = 1,
 	.resource       = acer_disp2_resources,
@@ -512,15 +512,9 @@ static struct nvhost_device acer_disp2_device = {
 /*
 	CARVEOUT
 */
-
+#ifdef CONFIG_TEGRA_NVMAP
 static struct nvmap_platform_carveout acer_carveouts[] = {
-	[0] = {
-		.name       = "iram",
-		.usage_mask = NVMAP_HEAP_CARVEOUT_IRAM,
-		.base       = TEGRA_IRAM_BASE + TEGRA_RESET_HANDLER_SIZE,
-		.size       = TEGRA_IRAM_SIZE - TEGRA_RESET_HANDLER_SIZE,
-		.buddy_size = 0, /* no buddy allocation for IRAM */
-	},
+	[0] = NVMAP_HEAP_CARVEOUT_IRAM_INIT,
 	[1] = {
 		.name       = "generic-0",
 		.usage_mask = NVMAP_HEAP_CARVEOUT_GENERIC,
@@ -542,9 +536,12 @@ static struct platform_device acer_nvmap_device = {
 		.platform_data = &acer_nvmap_data,
 	},
 };
+#endif
 
 static struct platform_device *acer_gfx_devices[] __initdata = {
+#ifdef CONFIG_TEGRA_NVMAP
 	&acer_nvmap_device,
+#endif
 	&tegra_pwfm0_device,
 	&acer_backlight_device,
 };
@@ -553,12 +550,15 @@ static struct platform_device *acer_gfx_devices[] __initdata = {
 int __init acer_panel_init(void)
 {
 	int err;
-	struct resource *res;
+	struct resource __maybe_unused *res;
+	struct platform_device *phost1x;
 
 	tegra_get_board_info(&board_info);
 
+#if defined(CONFIG_TEGRA_NVMAP)
 	acer_carveouts[1].base = tegra_carveout_start;
 	acer_carveouts[1].size = tegra_carveout_size;
+#endif
 
 	tegra_gpio_enable(LVDS_SHUTDOWN);
 	tegra_gpio_enable(LCD_VDD);
@@ -596,21 +596,21 @@ int __init acer_panel_init(void)
 	}
 #endif
 
-#ifdef CONFIG_TEGRA_GRHOST
-	err = tegra3_register_host1x_devices();
-	if (err)
-		return err;
-#endif
-
 	err = platform_add_devices(acer_gfx_devices,
 			ARRAY_SIZE(acer_gfx_devices));
 
+#ifdef CONFIG_TEGRA_GRHOST
+	phost1x = tegra3_register_host1x_devices();
+	if (!phost1x)
+		return -EINVAL;
+#endif
+
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_DC)
 	if (acer_board_type == BOARD_PICASSO_M) {
-		res = nvhost_get_resource_byname(&acer_pm_disp1_device,
+		res = platform_get_resource_byname(&acer_pm_disp1_device,
 				IORESOURCE_MEM, "fbmem");
 	}else{
-		res = nvhost_get_resource_byname(&acer_p2_disp1_device,
+		res = platform_get_resource_byname(&acer_p2_disp1_device,
 				IORESOURCE_MEM, "fbmem");
 	}
 	res->start = tegra_fb_start;
@@ -618,30 +618,37 @@ int __init acer_panel_init(void)
 #endif
 
 	/* Copy the bootloader fb to the fb. */
-	tegra_move_framebuffer(tegra_fb_start, tegra_bootloader_fb_start,
+	__tegra_move_framebuffer(&acer_nvmap_device,
+				tegra_fb_start, tegra_bootloader_fb_start,
 				min(tegra_fb_size, tegra_bootloader_fb_size));
 
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_DC)
 	if(!err){
 		if (acer_board_type == BOARD_PICASSO_M) {
-			err = nvhost_device_register(&acer_pm_disp1_device);
+			acer_pm_disp1_device.dev.parent = &phost1x->dev;
+			err = platform_device_register(&acer_pm_disp1_device);
 		}else{
-			err = nvhost_device_register(&acer_p2_disp1_device);
+			acer_p2_disp1_device.dev.parent = &phost1x->dev;
+			err = platform_device_register(&acer_p2_disp1_device);
 		}
 	}
 #if defined(CONFIG_TEGRA_HDMI)
-	res = nvhost_get_resource_byname(&acer_disp2_device,
+	res = platform_get_resource_byname(&acer_disp2_device,
 				IORESOURCE_MEM, "fbmem");
 	res->start = tegra_fb2_start;
 	res->end = tegra_fb2_start + tegra_fb2_size - 1;
-	if (!err)
-		err = nvhost_device_register(&acer_disp2_device);
+	if (!err) {
+		acer_disp2_device.dev.parent = &phost1x->dev;
+		err = platform_device_register(&acer_disp2_device);
+	}
 #endif
 #endif
 
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_NVAVP)
-	if (!err)
-		err = nvhost_device_register(&nvavp_device);
+	if (!err) {
+		nvavp_device.dev.parent = &phost1x->dev;
+		err = platform_device_register(&nvavp_device);
+	}
 #endif
 	return err;
 }
