@@ -536,11 +536,6 @@ static struct platform_device rotationlock_switch = {
 };
 #endif
 
-static struct platform_device tegra_camera = {
-	.name = "tegra_camera",
-	.id = -1,
-};
-
 static struct platform_device *cardhu_spi_devices[] __initdata = {
 	&tegra_spi_device4,
 };
@@ -662,7 +657,6 @@ static struct platform_device *cardhu_devices[] __initdata = {
 #if defined(CONFIG_TEGRA_AVP)
 	&tegra_avp_device,
 #endif
-	&tegra_camera,
 #ifdef CONFIG_ROTATELOCK
 	&rotationlock_switch,
 #endif
