@@ -30,6 +30,7 @@
 #include <mach/sdhci.h>
 #include <mach/io_dpd.h>
 #include <mach/pinmux.h>
+#include <mach/pinmux-tegra30.h>
 
 #include "gpio-names.h"
 #include "board.h"
@@ -405,8 +406,8 @@ static int __init cardhu_wifi_init(void)
 	if (commchip_id == COMMCHIP_MARVELL_SD8797)
 		platform_device_register(&marvell_wifi_device);
 	else {
-		cardhu_wifi_device.resource.start = gpio_to_irq(CARDHU_WLAN_WOW);
-		cardhu_wifi_device.resource.end = gpio_to_irq(CARDHU_WLAN_WOW);
+		cardhu_wifi_device.resource[0].start = gpio_to_irq(CARDHU_WLAN_WOW);
+		cardhu_wifi_device.resource[0].end = gpio_to_irq(CARDHU_WLAN_WOW);
 		platform_device_register(&cardhu_wifi_device);
 	}
 
