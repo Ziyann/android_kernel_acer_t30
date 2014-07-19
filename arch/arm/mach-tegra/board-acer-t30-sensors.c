@@ -61,8 +61,8 @@
 #endif
 
 #include <media/ov5640.h>
-#include <media/ov9740.h>
-#include <media/yuv_sensor.h>
+//#include <media/ov9740.h>
+//#include <media/yuv_sensor.h>
 
 static struct board_info board_info;
 
