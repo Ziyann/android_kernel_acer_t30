@@ -1012,29 +1012,10 @@ static int cardhu_nct1008_init(void)
 	nct1008_port = TEGRA_GPIO_PI3;
 
 	if (nct1008_port >= 0) {
-#ifdef CONFIG_TEGRA_EDP_LIMITS
-		const struct tegra_edp_limits *cpu_edp_limits;
-		int cpu_edp_limits_size;
-		int i;
-
-		/* edp capping */
-		tegra_get_cpu_edp_limits(&cpu_edp_limits, &cpu_edp_limits_size);
-
-		if (cpu_edp_limits_size > MAX_THROT_TABLE_SIZE)
-			BUG();
-
-		for (i = 0; i < cpu_edp_limits_size-1; i++) {
-			cardhu_nct1008_pdata.active[i].create_cdev =
-				(struct thermal_cooling_device *(*)(void *))
-					edp_cooling_device_create;
-			cardhu_nct1008_pdata.active[i].cdev_data = (void *)i;
-			cardhu_nct1008_pdata.active[i].trip_temp =
-				cpu_edp_limits[i].temperature * 1000;
-		}
-		cardhu_nct1008_pdata.active[i].create_cdev = NULL;
-#endif
-		/* FIXME: enable irq when throttling is supported */
-		cardhu_i2c4_nct1008_board_info[0].irq = gpio_to_irq(nct1008_port);
+		tegra_platform_edp_init(cardhu_nct1008_pdata.trips,
+								&cardhu_nct1008_pdata.num_trips);
+		cardhu_i2c4_nct1008_board_info[0].irq =
+									gpio_to_irq(nct1008_port);
 
 		ret = gpio_request(nct1008_port, "temp_alert");
 		if (ret < 0)
