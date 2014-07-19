@@ -4,7 +4,6 @@
 #include <linux/resource.h>
 #include <asm/mach-types.h>
 #include <linux/platform_device.h>
-#include <linux/earlysuspend.h>
 #include <linux/pwm_backlight.h>
 #include <asm/atomic.h>
 #include <linux/nvhost.h>
@@ -542,28 +541,6 @@ static struct platform_device *acer_gfx_devices[] __initdata = {
 };
 
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-struct early_suspend acer_panel_early_suspender;
-
-static void acer_panel_early_suspend(struct early_suspend *h)
-{
-	cancel_delayed_work_sync(&bl_en_gpio);
-	gpio_set_value(BL_ENABLE, 0);
-	msleep(210);
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_POWERDOWN);
-	if (num_registered_fb > 1)
-		fb_blank(registered_fb[1], FB_BLANK_NORMAL);
-}
-
-static void acer_panel_late_resume(struct early_suspend *h)
-{
-	unsigned i;
-	for (i = 0; i < num_registered_fb; i++)
-		fb_blank(registered_fb[i], FB_BLANK_UNBLANK);
-}
-#endif
-
 int __init acer_panel_init(void)
 {
 	int err;
@@ -597,13 +574,6 @@ int __init acer_panel_init(void)
 	if (err) {
 		pr_err("[HDMI] failed to set direction of hdmi_5V_enable\n");
 	}
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	acer_panel_early_suspender.suspend = acer_panel_early_suspend;
-	acer_panel_early_suspender.resume = acer_panel_late_resume;
-	acer_panel_early_suspender.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
-	register_early_suspend(&acer_panel_early_suspender);
-#endif
 
 #ifdef CONFIG_TEGRA_GRHOST
 	err = tegra3_register_host1x_devices();
