@@ -1208,7 +1208,6 @@ static void __init tegra_cardhu_reserve(void)
 #else
 	tegra_reserve(SZ_128M, SZ_8M, SZ_8M);
 #endif
-	tegra_ram_console_debug_reserve(SZ_1M);
 }
 
 MACHINE_START(PICASSO_M, "picasso_m")
