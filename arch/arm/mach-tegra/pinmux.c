@@ -494,6 +494,37 @@ int tegra_pinmux_set_pullupdown(int pg, enum tegra_pullupdown pupd)
 	return 0;
 }
 
+#if defined(CONFIG_ARCH_ACER_T30)
+int tegra_pinmux_set_e_input_bit(int pg,
+	enum tegra_e_input e_input)
+{
+	unsigned long reg;
+	unsigned long flags;
+
+	if (pg < 0 || pg >=  pingroup_max)
+		return -ERANGE;
+
+	if (pingroups[pg].pupd_reg <= 0)
+		return -EINVAL;
+
+	if (e_input != TEGRA_E_INPUT_DISABLE &&
+	    e_input != TEGRA_E_INPUT_ENABLE)
+		return -EINVAL;
+
+
+	spin_lock_irqsave(&mux_lock, flags);
+
+	reg = pg_readl(pingroups[pg].pupd_bank, pingroups[pg].pupd_reg);
+	reg &= ~(0x1 << 5);
+	reg |= e_input << 5;
+	pg_writel(reg, pingroups[pg].pupd_bank, pingroups[pg].pupd_reg);
+
+	spin_unlock_irqrestore(&mux_lock, flags);
+
+	return 0;
+}
+#endif
+
 static void tegra_pinmux_config_pingroup(const struct tegra_pingroup_config *config)
 {
 	int pingroup = config->pingroup;
