@@ -47,9 +47,9 @@
 #include <linux/mpu.h>
 #include <media/sh532u.h>
 #include <media/ad5816.h>
-#include <mach/gpio.h>
 #include <mach/edp.h>
 #include <linux/therm_est.h>
+#include <linux/gpio.h>
 
 #include "gpio-names.h"
 #include "board-acer-t30.h"
