@@ -1081,7 +1081,7 @@ static struct therm_est_data skin_data = {
 	.tc2 = 1,
 	.devs = {
 			{
-				.dev_data = "nct_ext",
+				.dev_data = "Tdiode",
 				.get_temp = tegra_skin_get_temp,
 				.coeffs = {
 					2, 1, 1, 1,
@@ -1092,7 +1092,7 @@ static struct therm_est_data skin_data = {
 				},
 			},
 			{
-				.dev_data = "nct_int",
+				.dev_data = "Tboard",
 				.get_temp = tegra_skin_get_temp,
 				.coeffs = {
 					-11, -7, -5, -3,
