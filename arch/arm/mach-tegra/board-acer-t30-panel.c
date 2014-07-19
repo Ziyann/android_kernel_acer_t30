@@ -359,7 +359,7 @@ static struct tegra_dc_platform_data acer_p2_disp1_pdata = {
 	.fb             = &acer_p2_fb_data,
 };
 
-static struct nvhost_device acer_p2_disp1_device = {
+static struct platform_device acer_p2_disp1_device = {
 	.name           = "tegradc",
 	.id             = 0,
 	.resource       = acer_disp1_resources,
@@ -490,7 +490,7 @@ static struct tegra_dc_platform_data acer_disp2_pdata = {
 	.emc_clk_rate   = 300000000,
 };
 
-static struct nvhost_device acer_disp2_device = {
+static struct platform_device acer_disp2_device = {
 	.name           = "tegradc",
 	.id             = 1,
 	.resource       = acer_disp2_resources,
@@ -545,6 +545,7 @@ int __init acer_panel_init(void)
 {
 	int err;
 	struct resource *res;
+	struct platform_device *phost1x;
 
 	tegra_get_board_info(&board_info);
 
@@ -575,21 +576,21 @@ int __init acer_panel_init(void)
 		pr_err("[HDMI] failed to set direction of hdmi_5V_enable\n");
 	}
 
-#ifdef CONFIG_TEGRA_GRHOST
-	err = tegra3_register_host1x_devices();
-	if (err)
-		return err;
-#endif
-
 	err = platform_add_devices(acer_gfx_devices,
 			ARRAY_SIZE(acer_gfx_devices));
 
+#ifdef CONFIG_TEGRA_GRHOST
+	phost1x = tegra3_register_host1x_devices();
+	if (!phost1x)
+		return -EINVAL;
+#endif
+
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_DC)
 	if (acer_board_type == BOARD_PICASSO_M) {
-		res = nvhost_get_resource_byname(&acer_pm_disp1_device,
+		res = platform_get_resource_byname(&acer_pm_disp1_device,
 				IORESOURCE_MEM, "fbmem");
 	}else{
-		res = nvhost_get_resource_byname(&acer_p2_disp1_device,
+		res = platform_get_resource_byname(&acer_p2_disp1_device,
 				IORESOURCE_MEM, "fbmem");
 	}
 	res->start = tegra_fb_start;
@@ -602,23 +603,28 @@ int __init acer_panel_init(void)
 
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_DC)
 	if(!err){
+		acer_p2_disp1_device.dev.parent = &phost1x->dev;
 		if (acer_board_type == BOARD_PICASSO_M) {
-			err = nvhost_device_register(&acer_pm_disp1_device);
+			err = platform_device_register(&acer_pm_disp1_device);
 		}else{
-			err = nvhost_device_register(&acer_p2_disp1_device);
+			err = platform_device_register(&acer_p2_disp1_device);
 		}
 	}
-	res = nvhost_get_resource_byname(&acer_disp2_device,
+	res = platform_get_resource_byname(&acer_disp2_device,
 				IORESOURCE_MEM, "fbmem");
 	res->start = tegra_fb2_start;
 	res->end = tegra_fb2_start + tegra_fb2_size - 1;
-	if (!err)
-		err = nvhost_device_register(&acer_disp2_device);
+	if (!err) {
+		acer_disp2_device.dev.parent = &phost1x->dev;
+		err = platform_device_register(&acer_disp2_device);
+	}
 #endif
 
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_NVAVP)
-	if (!err)
-		err = nvhost_device_register(&nvavp_device);
+	if (!err) {
+		nvavp_device.dev.parent = &phost1x->dev;
+		err = platform_device_register(&nvavp_device);
+	}
 #endif
 	return err;
 }
