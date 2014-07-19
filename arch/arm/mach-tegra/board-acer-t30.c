@@ -102,7 +102,6 @@ static void bt_shutdown_pin_init(void);
 void gpio_unused_init(void);
 
 static struct balanced_throttle throttle_list[] = {
-#ifdef CONFIG_TEGRA_THERMAL_THROTTLE
 	{
 		.id = BALANCED_THROTTLE_ID_TJ,
 		.throt_tab_size = 10,
@@ -119,7 +118,6 @@ static struct balanced_throttle throttle_list[] = {
 			{1000000, 1100 },
 		},
 	},
-#endif
 #ifdef CONFIG_TEGRA_SKIN_THROTTLE
 	{
 		.id = BALANCED_THROTTLE_ID_SKIN,
@@ -141,26 +139,24 @@ static struct tegra_thermal_data thermal_data = {
 	.shutdown_device_id = THERMAL_DEVICE_ID_NCT_EXT,
 	.temp_shutdown = 90000,
 
-#if defined(CONFIG_TEGRA_EDP_LIMITS) || defined(CONFIG_TEGRA_THERMAL_THROTTLE)
 	.throttle_edp_device_id = THERMAL_DEVICE_ID_NCT_EXT,
-#endif
 #ifdef CONFIG_TEGRA_EDP_LIMITS
 	.edp_offset = TDIODE_OFFSET,  /* edp based on tdiode */
 	.hysteresis_edp = 3000,
 #endif
-#ifdef CONFIG_TEGRA_THERMAL_THROTTLE
 	.temp_throttle = 85000,
 	.tc1 = 0,
 	.tc2 = 1,
 	.passive_delay = 2000,
-#endif
+};
+
+static struct tegra_skin_data skin_data = {
 #ifdef CONFIG_TEGRA_SKIN_THROTTLE
 	.skin_device_id = THERMAL_DEVICE_ID_SKIN,
 	.temp_throttle_skin = 43000,
 	.tc1_skin = 0,
 	.tc2_skin = 1,
 	.passive_delay_skin = 5000,
-
 	.skin_temp_offset = 9793,
 	.skin_period = 1100,
 	.skin_devs_size = 2,
@@ -186,6 +182,8 @@ static struct tegra_thermal_data thermal_data = {
 			}
 		},
 	},
+#else
+ .skin_device_id = THERMAL_DEVICE_ID_NULL,
 #endif
 };
 
@@ -1178,6 +1176,7 @@ extern void tegra_booting_info(void);
 static void __init tegra_cardhu_init(void)
 {
 	tegra_thermal_init(&thermal_data,
+				&skin_data,
 				throttle_list,
 				ARRAY_SIZE(throttle_list));
 	tegra_clk_init_from_table(cardhu_clk_init_table);
