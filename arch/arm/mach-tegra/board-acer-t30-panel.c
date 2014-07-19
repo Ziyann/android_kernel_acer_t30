@@ -102,7 +102,7 @@ static struct platform_device acer_backlight_device = {
 	},
 };
 
-static int acer_panel_enable(void)
+static int acer_panel_enable(struct device *dev)
 {
 	gpio_set_value(LCD_VDD,1);
 	udelay(400);
@@ -146,11 +146,11 @@ static int acer_hdmi_vddio_disable(void)
 }
 #endif
 
-static int acer_hdmi_enable(void)
+static int acer_hdmi_enable(struct device *dev)
 {
 	int ret;
 	if (!acer_hdmi_reg) {
-		acer_hdmi_reg = regulator_get(NULL, "avdd_hdmi");
+		acer_hdmi_reg = regulator_get(dev, "avdd_hdmi");
 		if (IS_ERR_OR_NULL(acer_hdmi_reg)) {
 			pr_err("[hdmi]: couldn't get regulator avdd_hdmi\n");
 			acer_hdmi_reg = NULL;
