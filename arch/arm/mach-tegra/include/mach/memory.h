@@ -19,11 +19,15 @@
 #ifndef __MACH_TEGRA_MEMORY_H
 #define __MACH_TEGRA_MEMORY_H
 
+#define PLAT_PHYS_OFFSET UL(0x80000000)
+
 /*
  * Unaligned DMA causes tegra dma to place data on 4-byte boundary after
  * expected address. Call to skb_reserve(skb, NET_IP_ALIGN) was causing skb
  * buffers in usbnet.c and u_ether.c to become unaligned.
  */
 #define NET_IP_ALIGN	0
+
+#define CONSISTENT_DMA_SIZE (14 * SZ_1M)
 
 #endif
