@@ -84,6 +84,11 @@
 #define   BOOTLOADER_MODE	BIT(30)
 #define   FORCED_RECOVERY_MODE	BIT(1)
 
+#if defined(CONFIG_ARCH_ACER_T30)
+#define   EN_DEBUG_MODE 	BIT(29)
+#define   DIS_DEBUG_MODE	BIT(28)
+#endif
+
 #define AHB_GIZMO_USB		0x1c
 #define AHB_GIZMO_USB2		0x78
 #define AHB_GIZMO_USB3		0x7c
@@ -191,12 +196,27 @@ void tegra_assert_system_reset(char mode, const char *cmd)
 			reg |= BOOTLOADER_MODE;
 		else if (!strcmp(cmd, "forced-recovery"))
 			reg |= FORCED_RECOVERY_MODE;
+#if defined(CONFIG_ARCH_ACER_T30)
+		else if (!strcmp(cmd, "debug_on"))
+			reg |= EN_DEBUG_MODE;
+		else if (!strcmp(cmd, "debug_off"))
+			reg |= DIS_DEBUG_MODE;
+		else
+			reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE |
+				 EN_DEBUG_MODE | DIS_DEBUG_MODE);
+#else
 		else
 			reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE);
+#endif
 	}
 	else {
+#if defined(CONFIG_ARCH_ACER_T30)
+		reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE |
+			EN_DEBUG_MODE | DIS_DEBUG_MODE);
+#else
 		/* Clearing SCRATCH0 31:30:1 on default reboot */
 		reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE);
+#endif
 	}
 	writel_relaxed(reg, reset + PMC_SCRATCH0);
 	reg = readl_relaxed(reset);

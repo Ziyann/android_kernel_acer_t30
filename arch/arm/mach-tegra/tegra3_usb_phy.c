@@ -1127,7 +1127,14 @@ static int utmi_phy_open(struct tegra_usb_phy *phy)
 		return PTR_ERR(phy->utmi_pad_clk);
 	}
 
+#ifdef CONFIG_ARCH_ACER_T30
+		if (phy->inst == 0)
+			phy->utmi_xcvr_setup = 0x3F;
+		else
+			phy->utmi_xcvr_setup = utmi_phy_xcvr_setup_value(phy);
+#else
 	phy->utmi_xcvr_setup = utmi_phy_xcvr_setup_value(phy);
+#endif
 
 	parent_rate = clk_get_rate(clk_get_parent(phy->pllu_clk));
 	for (i = 0; i < ARRAY_SIZE(utmip_freq_table); i++) {
