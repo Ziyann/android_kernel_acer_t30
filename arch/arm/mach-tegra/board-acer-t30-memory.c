@@ -1257,5 +1257,10 @@ int cardhu_emc_init(void)
 			emc_platdata = &cardhu_emc_chip_picasso2_elpida_1gb;
 	}
 
+	tegra_emc_device.dev.platform_data = emc_platdata;
+	platform_device_register(&tegra_emc_device);
+
+	tegra30_init_emc();
+
 	return 0;
 }
