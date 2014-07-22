@@ -98,6 +98,14 @@ config TOUCHSCREEN_ATMEL_MXT
 	  To compile this driver as a module, choose M here: the
 	  module will be called atmel_mxt_ts.
 
+config TOUCHSCREEN_ATMEL_MXT1386E
+	tristate "Atmel_mXT1386 Touchscreen Interface"
+	depends on I2C
+	default n
+	help
+	  To compile this driver as a module, choose M here: the
+	  module will be called atmel_mxt1386e.
+
 config TOUCHSCREEN_AUO_PIXCIR
 	tristate "AUO in-cell touchscreen using Pixcir ICs"
 	depends on I2C
