@@ -45,7 +45,7 @@ static void acer_backlight_work_queue(struct work_struct *work)
 static int acer_backlight_init(struct device *dev)
 {
 	/* TBR: disable gpio to change function pin */
-	tegra_gpio_disable(BL_PWM);
+	//tegra_gpio_disable(BL_PWM);
 	INIT_DELAYED_WORK(&bl_en_gpio, acer_backlight_work_queue);
 	return 0;
 }
@@ -418,7 +418,7 @@ static struct tegra_dc_platform_data acer_pm_disp1_pdata = {
 	.fb             = &acer_pm_fb_data,
 };
 
-static struct nvhost_device acer_pm_disp1_device = {
+static struct platform_device acer_pm_disp1_device = {
 	.name           = "tegradc",
 	.id             = 0,
 	.resource       = acer_disp1_resources,

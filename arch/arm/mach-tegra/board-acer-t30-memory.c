@@ -1242,7 +1242,9 @@ static struct tegra30_emc_pdata cardhu_emc_chip_picasso2_samsung_1gb = {
 
 int cardhu_emc_init(void)
 {
-	pr_info("################ Picasso M/MF RAMCODE = %ld #################\n" , RAM_CODE);
+	struct tegra30_emc_pdata *emc_platdata = NULL;
+
+	pr_info("################ Picasso M/MF RAMCODE = %ld #################\n" , RAM_CODE);	
 	switch(RAM_CODE){
 		case 0:
 			pr_info("%s: Elpida 1GB memory found\n", __func__);
