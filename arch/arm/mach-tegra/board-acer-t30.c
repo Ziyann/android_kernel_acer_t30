@@ -677,7 +677,6 @@ static struct i2c_board_info __initdata atmel_i2c_info[] = {
 		I2C_BOARD_INFO("maXTouch", 0X4C),
 	},
 };
-#endif
 
 static int __init acer_touch_init(void)
 {
@@ -714,8 +713,8 @@ static int __init acer_touch_init(void)
 	i2c_register_board_info(1, atmel_i2c_info, 1);
 
 	return 0;
-
 }
+#endif
 
 static int hsic_enable_gpio = -1;
 static int hsic_reset_gpio = -1;
@@ -1020,7 +1019,9 @@ static void __init tegra_cardhu_init(void)
 	cardhu_sdhci_init();
 	cardhu_regulator_init();
 	cardhu_suspend_init();
+#if defined(CONFIG_TOUCHSCREEN_ATMEL_MXT1386E)
 	acer_touch_init();
+#endif
 	cardhu_gps_init();
 	cardhu_scroll_init();
 	acer_keys_init();
