@@ -81,6 +81,8 @@
 
 #define POWER_ON_DELAY 20 /*ms*/
 
+struct i2c_client *cpu_client;
+
 struct nct1008_data {
 	struct workqueue_struct *workqueue;
 	struct work_struct work;
@@ -159,6 +161,46 @@ static int nct1008_read_reg(struct i2c_client *client, u8 reg)
 
 	return ret;
 }
+
+static int nct1008_show_cpu_temp(struct nct1008_data* data)
+{
+	struct i2c_client *client = data->client;
+	struct nct1008_platform_data *pdata = client->dev.platform_data;
+	s8 cpu_temp;
+	int ret = 0;
+	int ret_lo;
+
+	ret_lo = i2c_smbus_read_byte_data(client, EXT_TEMP_RD_LO);
+	if (ret_lo < 0)
+		dev_err(&client->dev, "%s: failed to read "
+			"ext_temperature, i2c error=%d\n", __func__, ret_lo);
+
+	ret= i2c_smbus_read_byte_data(client, EXT_TEMP_RD_HI);
+	if (ret < 0)
+		dev_err(&client->dev, "%s: failed to read "
+			"ext_temperature, i2c error=%d\n", __func__, ret);
+
+	cpu_temp = value_to_temperature(pdata->ext_range, ret);
+	return cpu_temp;
+}
+
+int tegra3_cpu_temp_query(void)
+{
+	struct nct1008_data *data;
+	int ret = 0;
+	data = kzalloc(sizeof(struct nct1008_data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->client = cpu_client;
+	memcpy(&data->plat_data, cpu_client->dev.platform_data,
+		sizeof(struct nct1008_platform_data));
+
+	ret = nct1008_show_cpu_temp(data);
+	kfree(data);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(tegra3_cpu_temp_query);
 
 static int nct1008_get_temp(struct device *dev, long *etemp, long *itemp)
 {
@@ -1106,6 +1148,7 @@ static int __devinit nct1008_probe(struct i2c_client *client,
 
 	data->client = client;
 	data->chip = id->driver_data;
+	cpu_client = client;
 	memcpy(&data->plat_data, client->dev.platform_data,
 		sizeof(struct nct1008_platform_data));
 	i2c_set_clientdata(client, data);

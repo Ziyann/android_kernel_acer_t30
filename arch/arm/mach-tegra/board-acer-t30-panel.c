@@ -163,7 +163,7 @@ static int acer_hdmi_enable(struct device *dev)
 		return ret;
 	}
 	if (!acer_hdmi_pll) {
-		acer_hdmi_pll = regulator_get(NULL, "avdd_hdmi_pll");
+		acer_hdmi_pll = regulator_get(dev, "avdd_hdmi_pll");
 		if (IS_ERR_OR_NULL(acer_hdmi_pll)) {
 			pr_err("[hdmi]: couldn't get regulator avdd_hdmi_pll\n");
 			acer_hdmi_pll = NULL;

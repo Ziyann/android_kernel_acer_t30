@@ -103,6 +103,16 @@ struct gpio_table {
 #define	GPIO_DISABLE	0
 #define	GPIO_OUTPUT	1
 #define	GPIO_INPUT	0
+
+static inline int irq_to_gpio(unsigned int irq)
+{
+	/* SOC gpio */
+	if ((irq >= INT_GPIO_BASE) && (irq < INT_GPIO_BASE + INT_GPIO_NR))
+		return irq - INT_GPIO_BASE;
+
+	/* we don't supply reverse mappings for non-SOC gpios */
+	return -EIO;
+}
 #endif
 
 void tegra_gpio_config(struct tegra_gpio_table *table, int num);

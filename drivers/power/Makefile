@@ -58,3 +58,4 @@ CFLAGS_tegra_bpc_mgmt.o		= -Werror
 obj-$(CONFIG_TEGRA_BPC_MGMT)	+= tegra_bpc_mgmt.o
 obj-$(CONFIG_CHARGER_SMB347)	+= smb347-charger.o
 obj-$(CONFIG_BATTERY_ANDROID)	+= android_battery.o
+obj-$(CONFIG_BATTERY_BQ27541)	+= bq27541_battery.o

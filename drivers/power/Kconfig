@@ -393,3 +393,10 @@ config TEGRA_BPC_MGMT
 	help
 	  This driver reduces cpu frequency/voltage on gpio event from the
 	  battery current monitor device.
+
+config BATTERY_BQ27541
+	tristate "BQ27541 battery driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here to enable support for batteries with BQ27541 (I2C) chips.
