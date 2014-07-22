@@ -41,6 +41,7 @@
 
 
 #include <sound/wm8903.h>
+#include <asm/hardware/gic.h>
 
 #include <mach/edp.h>
 #include <mach/clk.h>
@@ -100,7 +101,6 @@ extern int acer_board_id;
 extern int acer_sku;
 extern int acer_wifi_module;
 
-static void bt_shutdown_pin_init(void);
 void gpio_unused_init(void);
 
 static int bt_uart_gpio[] = {
@@ -198,22 +198,11 @@ static struct platform_device cardhu_bcm4329_rfkill_device = {
 static noinline void __init cardhu_bcm4329_bt_rfkill(void)
 {
 	disable_bt_uart_func();
-	bt_shutdown_pin_init();
 	return;
 }
 #else
 static inline void cardhu_bcm4329_bt_rfkill(void) { }
 #endif
-
-static void bt_shutdown_pin_init(void) {
-        if(acer_board_type == BOARD_PICASSO_2) {
-            if(acer_board_id == BOARD_DVT1) {
-                cardhu_bcm4329_rfkill_device.resource[0].start = TEGRA_GPIO_PS3;
-                cardhu_bcm4329_rfkill_device.resource[0].end   = TEGRA_GPIO_PS3;
-                pr_info("bt_shutdown_pin_init: TEGRA_GPIO_PS3\n");
-            }
-        }
-}
 
 static struct resource cardhu_bluesleep_resources[] = {
 	[0] = {
@@ -957,9 +946,7 @@ static void simdet_init(void)
 #endif
 
 static void acer_board_info(void) {
-	if (acer_board_type == BOARD_PICASSO_2)
-		pr_info("Board Type: Picasso 2\n");
-	else if (acer_board_type == BOARD_PICASSO_M)
+	if (acer_board_type == BOARD_PICASSO_M)
 		pr_info("Board Type: Picasso M\n");
 	else if (acer_board_type == BOARD_PICASSO_MF)
 		pr_info("Board Type: Picasso MF\n");
@@ -1075,21 +1062,25 @@ static void __init tegra_cardhu_reserve(void)
 }
 
 MACHINE_START(PICASSO_M, "picasso_m")
-	.boot_params    = 0x80000100,
+	.atag_offset    = 0x100,
 	.map_io         = tegra_map_common_io,
 	.reserve        = tegra_cardhu_reserve,
-	.init_early	= tegra_init_early,
+	.init_early	    = tegra30_init_early,
 	.init_irq       = tegra_init_irq,
+	.handle_irq     = gic_handle_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_cardhu_init,
+	.restart        = tegra_assert_system_reset,
 MACHINE_END
 
 MACHINE_START(PICASSO_MF, "picasso_mf")
-	.boot_params    = 0x80000100,
+	.atag_offset    = 0x100,
 	.map_io         = tegra_map_common_io,
 	.reserve        = tegra_cardhu_reserve,
-	.init_early	= tegra_init_early,
+	.init_early	    = tegra30_init_early,
 	.init_irq       = tegra_init_irq,
+	.handle_irq     = gic_handle_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_cardhu_init,
+	.restart        = tegra_assert_system_reset,
 MACHINE_END
