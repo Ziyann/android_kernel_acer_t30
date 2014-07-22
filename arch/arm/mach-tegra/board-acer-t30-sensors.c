@@ -935,7 +935,6 @@ static struct i2c_board_info cardhu_i2c8_board_info[] = {
 static const struct i2c_board_info cardhu_i2c0_stk2203_board_info[] = {
 	{
 		I2C_BOARD_INFO("stk_als", 0x10),
-		.irq = TEGRA_GPIO_TO_IRQ(STK_INTR),
 	},
 };
 
@@ -953,6 +952,7 @@ static void cardhu_stk2203_init(void)
 		pr_err("%s: gpio_direction_input failed for gpio %s\n",
 		__func__, "TEGRA_GPIO_PX3");
 
+	cardhu_i2c0_stk2203_board_info[0].irq = gpio_to_irq(STK_INTR);
 	i2c_register_board_info(0, cardhu_i2c0_stk2203_board_info,
 		ARRAY_SIZE(cardhu_i2c0_stk2203_board_info));
 }
@@ -1032,7 +1032,7 @@ static int cardhu_nct1008_init(void)
 		cardhu_nct1008_pdata.active[i].create_cdev = NULL;
 #endif
 		/* FIXME: enable irq when throttling is supported */
-		cardhu_i2c4_nct1008_board_info[0].irq = TEGRA_GPIO_TO_IRQ(nct1008_port);
+		cardhu_i2c4_nct1008_board_info[0].irq = gpio_to_irq(nct1008_port);
 
 		ret = gpio_request(nct1008_port, "temp_alert");
 		if (ret < 0)
@@ -1172,7 +1172,6 @@ static struct mpu_platform_data mpu_data = {
 static struct i2c_board_info __initdata mpu3050_i2c0_boardinfo[] = {
 	{
 		I2C_BOARD_INFO(SENSOR_MPU_NAME, 0x68),
-		.irq = TEGRA_GPIO_TO_IRQ(GYRO_INT_R),
 		.platform_data = &mpu_data,
 	},
 };
@@ -1259,6 +1258,7 @@ int __init cardhu_sensors_init(void)
 		ARRAY_SIZE(cardhu_i2c4_nct1008_board_info));
 
 #ifdef CONFIG_MPU_SENSORS_MPU3050
+	mpu3050_i2c0_boardinfo[0].irq = gpio_to_irq(GYRO_INT_R);
 	i2c_register_board_info(0, mpu3050_i2c0_boardinfo,
 		ARRAY_SIZE(mpu3050_i2c0_boardinfo));
 

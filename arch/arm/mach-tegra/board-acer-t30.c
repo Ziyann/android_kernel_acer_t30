@@ -230,8 +230,6 @@ static struct resource cardhu_bluesleep_resources[] = {
 	},
 	[2] = {
 		.name = "host_wake",
-			.start  = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PS7),
-			.end    = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PS7),
 			.flags  = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
 	},
 };
@@ -246,6 +244,8 @@ static struct platform_device cardhu_bluesleep_device = {
 extern void bluesleep_setup_uart_port(struct platform_device *uart_dev);
 static noinline void __init cardhu_setup_bluesleep(void)
 {
+	cardhu_bluesleep_device.resource[2].start = gpio_to_irq(TEGRA_GPIO_PS7);
+	cardhu_bluesleep_device.resource[2].end = gpio_to_irq(TEGRA_GPIO_PS7);
 	platform_device_register(&cardhu_bluesleep_device);
 	bluesleep_setup_uart_port(&tegra_uartc_device);
 	bt_ext_gpio_init();
@@ -364,7 +364,6 @@ static struct wm8903_platform_data cardhu_wm8903_pdata = {
 
 static struct i2c_board_info __initdata cardhu_codec_wm8903_info = {
 	I2C_BOARD_INFO("wm8903", 0x1a),
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
 	.platform_data = &cardhu_wm8903_pdata,
 };
 
@@ -400,6 +399,7 @@ static void cardhu_i2c_init(void)
 	platform_device_register(&tegra_i2c_device2);
 	platform_device_register(&tegra_i2c_device1);
 
+	cardhu_codec_wm8903_info.irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ);
 	i2c_register_board_info(4, &cardhu_codec_wm8903_info, 1);
 #ifdef CONFIG_EEPROM_AT24C02C
 	i2c_register_board_info(4, cardhu_i2c_eeprom_board_info, 1);
@@ -686,7 +686,6 @@ static struct platform_device *cardhu_devices[] __initdata = {
 static struct i2c_board_info __initdata atmel_i2c_info[] = {
 	{
 		I2C_BOARD_INFO("maXTouch", 0X4C),
-		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PJ0),
 	},
 };
 #endif
@@ -722,6 +721,7 @@ static int __init acer_touch_init(void)
 	msleep(2);
 	gpio_set_value(TEGRA_GPIO_PI2, 1);
 
+	atmel_i2c_info[0].irq = gpio_to_irq(TEGRA_GPIO_PJ0);
 	i2c_register_board_info(1, atmel_i2c_info, 1);
 
 	return 0;

@@ -60,8 +60,6 @@ static struct wifi_platform_data cardhu_wifi_control = {
 static struct resource wifi_resource[] = {
 	[0] = {
 		.name	= "bcmdhd_wlan_irq",
-		.start	= TEGRA_GPIO_TO_IRQ(CARDHU_WLAN_WOW),
-		.end	= TEGRA_GPIO_TO_IRQ(CARDHU_WLAN_WOW),
 		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL | IORESOURCE_IRQ_SHAREABLE,
 	},
 };
@@ -406,8 +404,11 @@ static int __init cardhu_wifi_init(void)
 
 	if (commchip_id == COMMCHIP_MARVELL_SD8797)
 		platform_device_register(&marvell_wifi_device);
-	else
-	platform_device_register(&cardhu_wifi_device);
+	else {
+		cardhu_wifi_device.resource.start = gpio_to_irq(CARDHU_WLAN_WOW);
+		cardhu_wifi_device.resource.end = gpio_to_irq(CARDHU_WLAN_WOW);
+		platform_device_register(&cardhu_wifi_device);
+	}
 
 	disable_wifi_sdio_func();
 	return 0;
