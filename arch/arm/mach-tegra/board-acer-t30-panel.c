@@ -45,7 +45,7 @@ static void acer_backlight_work_queue(struct work_struct *work)
 static int acer_backlight_init(struct device *dev)
 {
 	/* TBR: disable gpio to change function pin */
-	//tegra_gpio_disable(BL_PWM);
+	tegra_gpio_disable(BL_PWM);
 	INIT_DELAYED_WORK(&bl_en_gpio, acer_backlight_work_queue);
 	return 0;
 }
