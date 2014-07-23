@@ -16,18 +16,12 @@
 #include <linux/ioctl.h>
 #include <linux/miscdevice.h>
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
-#endif
-
 #if defined(CONFIG_MACH_PICASSO_M)
 #include <linux/input/mxt1386e_pm.h>
-#elif defined(CONFIG_MACH_PICASSO2)
-#include <linux/input/mxt1386e_p2.h>
 #elif defined(CONFIG_MACH_PICASSO_MF)
 #include <linux/input/mxt1386e_pmf.h>
 #else
-#include <linux/input/mxt1386e_p2.h>
+#include <linux/input/mxt1386e_pm.h>
 #endif
 
 #define ATMEL1386E_IOCTL_MAGIC 't'
@@ -55,7 +49,7 @@ struct point_data {
 	short Y;
 };
 
-static int debug = DEBUG_ERROR;
+static int debug = DEBUG_DETAIL;
 
 /* The information of firmware */
 static int Firmware_Info = 0;
@@ -233,9 +227,6 @@ struct mxt_data
 	int init_irq;
 	int touch_irq;
 	short irq_type;
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	struct early_suspend early_suspend;
-#endif
 	struct mutex lock;
 };
 
@@ -254,10 +245,6 @@ static int ATMEL_IsResume(struct mxt_data *mxt);
 static int ATMEL_Calibrate(struct mxt_data *mxt);
 #if defined(CONFIG_MACH_PICASSO_MF) || defined(CONFIG_MACH_PICASSO_M)
 static int ATMEL_Bending_On_Off(struct mxt_data *mxt, u8 cfg_switch);
-#endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
-void mxt_early_suspend(struct early_suspend *h);
-void mxt_late_resume(struct early_suspend *h);
 #endif
 
 /* Writes a block of bytes (max 256) to given address in mXT chip. */
@@ -1931,12 +1918,6 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	mutex_init(&mxt->lock);
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	mxt->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	mxt->early_suspend.suspend = mxt_early_suspend;
-	mxt->early_suspend.resume = mxt_late_resume;
-	register_early_suspend(&mxt->early_suspend);
-#endif
 	return 0;
 
 err_irq:
@@ -1972,60 +1953,7 @@ static int mxt_remove(struct i2c_client *client)
 	return 0;
 }
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-void mxt_early_suspend(struct early_suspend *h)
-{
-	struct mxt_data *data = container_of(h, struct mxt_data, early_suspend);
-	int ret = 0;
-	mxt_debug(DEBUG_ERROR, "mXT1386E: mxt_early_suspend\n");
-
-	disable_irq(data->touch_irq);
-	cancel_delayed_work(&data->bending_dwork);
-	cancel_work_sync(&data->touch_dwork);
-	/*
-	system will still go to suspend if i2c error,
-	but it will be blocked if sleep configs are not written to touch successfully
-	*/
-#if defined(CONFIG_MACH_PICASSO_MF) || defined(CONFIG_MACH_PICASSO_M)
-	bending_enable = 1;
-	if (ATMEL_Bending_On_Off(data, 0) < 0)
-		mxt_debug(DEBUG_ERROR, "mXT1386E: Bending Disable failed\n");
-#endif
-	if (ATMEL_Deepsleep(data) == 0) {
-		mxt_debug(DEBUG_ERROR, "mXT1386E: ATMEL_Deepsleep OK!\n");
-	} else {
-		ret = ATMEL_Issleep(data);
-		mxt_debug(DEBUG_ERROR, "mXT1386E: ATMEL SUSPEND Fail: %d\n", ret);
-	}
-}
-
-void mxt_late_resume(struct early_suspend *h)
-{
-	struct mxt_data *data = container_of(h, struct mxt_data, early_suspend);
-	int i, ret;
-	mxt_debug(DEBUG_ERROR, "mXT1386E: mxt_late_resume\n");
-
-	for(i=0;i<NUM_FINGERS;i++) {
-		data->PointBuf[i].X = 0;
-		data->PointBuf[i].Y = 0;
-		data->PointBuf[i].Status = -1;
-	}
-	/*
-	system will still resume back if i2c error,
-	but it will be blocked if resume configs are not written to touch successfully
-	*/
-	if (ATMEL_Resume(data) == 0) {
-		mxt_debug(DEBUG_ERROR, "mXT1386E: ATMEL_Resume OK!\n");
-	} else {
-		ret = ATMEL_IsResume(data);
-		mxt_debug(DEBUG_ERROR, "mXT1386E: ATMEL Resume Fail: %d\n", ret);
-	}
-	if (ATMEL_Calibrate(data) < 0)
-		mxt_debug(DEBUG_ERROR, "mXT1386E: calibration failed\n");
-	enable_irq(data->touch_irq);
-}
-#endif
-#if !defined(CONFIG_HAS_EARLYSUSPEND) && defined(CONFIG_PM)
+#if defined(CONFIG_PM)
 static int mxt_suspend(struct i2c_client *client, pm_message_t mesg)
 {
 	mxt_debug(DEBUG_ERROR, "mXT1386E: mxt_suspend\n");
@@ -2048,7 +1976,7 @@ static struct i2c_driver mxt_driver =
 {
 	.probe      = mxt_probe,
 	.remove     = mxt_remove,
-#if !defined(CONFIG_HAS_EARLYSUSPEND) && defined(CONFIG_PM)
+#if defined(CONFIG_PM)
 	.suspend    = mxt_suspend,
 	.resume     = mxt_resume,
 #endif
