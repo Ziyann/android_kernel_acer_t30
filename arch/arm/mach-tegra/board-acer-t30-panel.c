@@ -32,8 +32,8 @@ static struct regulator *acer_hdmi_reg = NULL;
 static struct regulator *acer_hdmi_pll = NULL;
 
 static atomic_t sd_brightness = ATOMIC_INIT(255);
-static struct board_info board_info;
 static struct delayed_work bl_en_gpio;
+static struct tegra_dc_platform_data acer_p2_disp1_pdata;
 
 extern int acer_board_type;
 
@@ -108,6 +108,7 @@ static int acer_panel_enable(struct device *dev)
 	udelay(400);
 	gpio_set_value(LVDS_SHUTDOWN,1);
 	msleep(10);
+
 	return 0;
 }
 
@@ -544,13 +545,16 @@ static struct platform_device *acer_gfx_devices[] __initdata = {
 int __init acer_panel_init(void)
 {
 	int err;
-	struct resource *res;
+	struct resource __maybe_unused *res;
+	struct board_info board_info;
 	struct platform_device *phost1x;
 
 	tegra_get_board_info(&board_info);
 
+#if defined(CONFIG_TEGRA_NVMAP)
 	acer_carveouts[1].base = tegra_carveout_start;
 	acer_carveouts[1].size = tegra_carveout_size;
+#endif
 
 	gpio_request(LVDS_SHUTDOWN, "lvds_shutdown");
 	gpio_request(LCD_VDD, "lcd_vdd");
@@ -576,20 +580,20 @@ int __init acer_panel_init(void)
 		pr_err("[HDMI] failed to set direction of hdmi_5V_enable\n");
 	}
 
-	err = platform_add_devices(acer_gfx_devices,
-			ARRAY_SIZE(acer_gfx_devices));
-
 #ifdef CONFIG_TEGRA_GRHOST
 	phost1x = tegra3_register_host1x_devices();
 	if (!phost1x)
 		return -EINVAL;
 #endif
 
+	err = platform_add_devices(acer_gfx_devices,
+			ARRAY_SIZE(acer_gfx_devices));
+
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_DC)
 	if (acer_board_type == BOARD_PICASSO_M) {
 		res = platform_get_resource_byname(&acer_pm_disp1_device,
 				IORESOURCE_MEM, "fbmem");
-	}else{
+	} else {
 		res = platform_get_resource_byname(&acer_p2_disp1_device,
 				IORESOURCE_MEM, "fbmem");
 	}
@@ -602,14 +606,16 @@ int __init acer_panel_init(void)
 				min(tegra_fb_size, tegra_bootloader_fb_size));
 
 #if defined(CONFIG_TEGRA_GRHOST) && defined(CONFIG_TEGRA_DC)
-	if(!err){
-		acer_p2_disp1_device.dev.parent = &phost1x->dev;
+	if (!err) {
 		if (acer_board_type == BOARD_PICASSO_M) {
+			acer_pm_disp1_device.dev.parent = &phost1x->dev;
 			err = platform_device_register(&acer_pm_disp1_device);
-		}else{
+		} else {
+			acer_p2_disp1_device.dev.parent = &phost1x->dev;
 			err = platform_device_register(&acer_p2_disp1_device);
 		}
 	}
+
 	res = platform_get_resource_byname(&acer_disp2_device,
 				IORESOURCE_MEM, "fbmem");
 	res->start = tegra_fb2_start;
