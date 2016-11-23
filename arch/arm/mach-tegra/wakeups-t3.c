@@ -46,7 +46,7 @@ static struct tegra_wake_info tegra_wake_event_data_t3[] = {
 	{INT_EXTERNAL_PMU, POLARITY_NONE},			/* wake18 */
 	{INT_USB, POLARITY_EDGE_ANY}, /* TEGRA_USB1_VBUS, */		/* wake19 */
 	{-EINVAL, POLARITY_EDGE_ANY}, /* TEGRA_USB2_VBUS, */		/* wake20 */
-	{INT_USB, POLARITY_EDGE_ANY}, /* TEGRA_USB1_ID, */		/* wake21 */
+	{-EINVAL, POLARITY_EDGE_ANY}, /* TEGRA_USB1_ID, */		/* wake21 */
 	{-EINVAL, POLARITY_EDGE_ANY}, /* TEGRA_USB2_ID, */		/* wake22 */
 	{TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PI5), POLARITY_NONE},	/* wake23 */
 	{TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PV0), POLARITY_NONE},	/* wake24 */

@@ -78,6 +78,7 @@
 #define CELSIUS_TO_MILLICELSIUS(x) ((x)*1000)
 #define MILLICELSIUS_TO_CELSIUS(x) ((x)/1000)
 
+struct i2c_client *cpu_client;
 
 static int conv_period_ms_table[] =
 	{16000, 8000, 4000, 2000, 1000, 500, 250, 125, 63, 32, 16};
@@ -91,6 +92,46 @@ static inline u8 temperature_to_value(bool extended, s8 temp)
 {
 	return extended ? (u8)(temp + EXTENDED_RANGE_OFFSET) : (u8)temp;
 }
+
+static int nct1008_show_cpu_temp(struct nct1008_data* data)
+{
+	struct i2c_client *client = data->client;
+	struct nct1008_platform_data *pdata = client->dev.platform_data;
+	s8 cpu_temp;
+	int ret = 0;
+	int ret_lo;
+
+	ret_lo = i2c_smbus_read_byte_data(client, EXT_TEMP_RD_LO);
+	if (ret_lo < 0)
+		dev_err(&client->dev, "%s: failed to read "
+			"ext_temperature, i2c error=%d\n", __func__, ret_lo);
+
+	ret= i2c_smbus_read_byte_data(client, EXT_TEMP_RD_HI);
+	if (ret < 0)
+		dev_err(&client->dev, "%s: failed to read "
+			"ext_temperature, i2c error=%d\n", __func__, ret);
+
+	cpu_temp = value_to_temperature(pdata->ext_range, ret);
+	return cpu_temp;
+}
+
+int tegra3_cpu_temp_query(void)
+{
+	struct nct1008_data *data;
+	int ret = 0;
+	data = kzalloc(sizeof(struct nct1008_data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->client = cpu_client;
+	memcpy(&data->plat_data, cpu_client->dev.platform_data,
+		sizeof(struct nct1008_platform_data));
+
+	ret = nct1008_show_cpu_temp(data);
+	kfree(data);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(tegra3_cpu_temp_query);
 
 static int nct1008_get_temp(struct device *dev, long *etemp, long *itemp)
 {
@@ -685,6 +726,20 @@ static int __devinit nct1008_configure_sensor(struct nct1008_data* data)
 	if (err < 0)
 		goto error;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	value = temperature_to_value(pdata->ext_range, pdata->throttling_ext_limit);
+
+	/*External Temperature Throttling limit */
+	err = i2c_smbus_write_byte_data(client, EXT_TEMP_HI_LIMIT_HI_BYTE_WR, value);
+	if (err < 0)
+		goto error;
+
+	/* Local Temperature Throttling limit */
+	err = i2c_smbus_write_byte_data(client, LOCAL_TEMP_HI_LIMIT_WR, value);
+	if (err < 0)
+		goto error;
+#endif
+
 	/* register sysfs hooks */
 	err = sysfs_create_group(&client->dev.kobj, &nct1008_attr_group);
 	if (err < 0) {
@@ -734,6 +789,10 @@ int nct1008_thermal_set_limits(struct nct1008_data *data,
 				long lo_limit_milli,
 				long hi_limit_milli)
 {
+#if defined(CONFIG_ARCH_ACER_T30)
+	struct i2c_client *client = data->client;
+	struct nct1008_platform_data *pdata = client->dev.platform_data;
+#endif
 	int err;
 	u8 value;
 	bool extended_range = data->plat_data.ext_range;
@@ -755,7 +814,11 @@ int nct1008_thermal_set_limits(struct nct1008_data *data,
 	}
 
 	if (data->current_hi_limit != hi_limit) {
+#if defined(CONFIG_ARCH_ACER_T30)
+		value = temperature_to_value(pdata->ext_range, pdata->throttling_ext_limit);
+#else
 		value = temperature_to_value(extended_range, hi_limit);
+#endif
 		pr_debug("%s: set hi_limit %ld\n", __func__, hi_limit);
 		err = i2c_smbus_write_byte_data(data->client,
 				EXT_TEMP_HI_LIMIT_HI_BYTE_WR, value);
@@ -832,6 +895,7 @@ static int __devinit nct1008_probe(struct i2c_client *client,
 
 	data->client = client;
 	data->chip = id->driver_data;
+	cpu_client = client;
 	memcpy(&data->plat_data, client->dev.platform_data,
 		sizeof(struct nct1008_platform_data));
 	i2c_set_clientdata(client, data);

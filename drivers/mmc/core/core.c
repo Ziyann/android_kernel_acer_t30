@@ -607,7 +607,11 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 			 * The limit is really 250 ms, but that is
 			 * insufficient for some crappy cards.
 			 */
+#if defined(CONFIG_ARCH_ACER_T30)
+			limit_us = 800000;
+#else
 			limit_us = 300000;
+#endif
 		else
 			limit_us = 100000;
 
@@ -2315,7 +2319,9 @@ int mmc_resume_host(struct mmc_host *host)
 			printk(KERN_WARNING "%s: error %d during resume "
 					    "(card was removed?)\n",
 					    mmc_hostname(host), err);
+#if !defined(CONFIG_ARCH_ACER_T30)
 			err = 0;
+#endif
 		}
 	}
 	host->pm_flags &= ~MMC_PM_KEEP_POWER;

@@ -73,6 +73,15 @@
 #include "dvfs.h"
 #include "cpu-tegra.h"
 
+#if defined(CONFIG_ARCH_ACER_T30)
+#include <linux/gpio.h>
+#include "gpio-names.h"
+
+#define POWER_KEY_GPIO TEGRA_GPIO_PV0
+int p2_wakeup = 1;
+extern int acer_gpio_sleep_table_store(void);
+#endif
+
 struct suspend_context {
 	/*
 	 * The next 7 values are referenced by offset in __restart_plls
@@ -178,7 +187,7 @@ struct suspend_context tegra_sctx;
 #define MC_SECURITY_SIZE	0x70
 #define MC_SECURITY_CFG2	0x7c
 
-#define AWAKE_CPU_FREQ_MIN	51000
+#define AWAKE_CPU_FREQ_MIN	100000
 static struct pm_qos_request_list awake_cpu_freq_req;
 
 struct dvfs_rail *tegra_cpu_rail;
@@ -186,6 +195,10 @@ static struct dvfs_rail *tegra_core_rail;
 static struct clk *tegra_pclk;
 static const struct tegra_suspend_platform_data *pdata;
 static enum tegra_suspend_mode current_suspend_mode = TEGRA_SUSPEND_NONE;
+
+#if defined(CONFIG_ARCH_ACER_T30)
+void gpio_sleep_init(void);
+#endif
 
 #if defined(CONFIG_TEGRA_CLUSTER_CONTROL) && INSTRUMENT_CLUSTER_SWITCH
 enum tegra_cluster_switch_time_id {
@@ -807,9 +820,17 @@ static int tegra_suspend_enter(suspend_state_t state)
 	ktime_t delta;
 	struct timespec ts_entry, ts_exit;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	bool do_lp0 = (current_suspend_mode == TEGRA_SUSPEND_LP0);
+#endif
+
 	if (pdata && pdata->board_suspend)
 		pdata->board_suspend(current_suspend_mode, TEGRA_SUSPEND_BEFORE_PERIPHERAL);
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	if(do_lp0)
+		gpio_sleep_init();
+#endif
 	read_persistent_clock(&ts_entry);
 
 	ret = tegra_suspend_dram(current_suspend_mode, 0);
@@ -901,6 +922,10 @@ int tegra_suspend_dram(enum tegra_suspend_mode mode, unsigned int flags)
 		pdata->board_suspend(mode, TEGRA_SUSPEND_BEFORE_CPU);
 
 	local_fiq_disable();
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	acer_gpio_sleep_table_store();
+#endif
 
 	trace_cpu_suspend(CPU_SUSPEND_START);
 
@@ -1072,6 +1097,9 @@ static int tegra_pm_enter_suspend(void)
 
 static void tegra_pm_enter_resume(void)
 {
+#if defined(CONFIG_ARCH_ACER_T30)
+	p2_wakeup = gpio_get_value(POWER_KEY_GPIO);
+#endif
 	if (current_suspend_mode == TEGRA_SUSPEND_LP0)
 		tegra_lp0_cpu_mode(false);
 	pr_info("Exited suspend state %s\n", lp_state[current_suspend_mode]);
@@ -1351,7 +1379,11 @@ static void pm_early_suspend(struct early_suspend *h)
 {
 	if (clk_wake)
 		clk_disable(clk_wake);
+#if defined(CONFIG_ARCH_ACER_T30)
+	pm_qos_update_request(&awake_cpu_freq_req, (s32)AWAKE_CPU_FREQ_MIN);
+#else
 	pm_qos_update_request(&awake_cpu_freq_req, PM_QOS_DEFAULT_VALUE);
+#endif
 }
 
 static void pm_late_resume(struct early_suspend *h)

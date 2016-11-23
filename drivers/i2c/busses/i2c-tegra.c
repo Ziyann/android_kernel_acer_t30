@@ -39,6 +39,12 @@
 #include <mach/clk.h>
 #include <mach/pinmux.h>
 
+#ifdef CONFIG_I2C_ACER_ENABLE
+atomic_t during_suspend = ATOMIC_INIT(0);
+atomic_t finished = ATOMIC_INIT(1);
+static int is_dumped = 0;
+#endif
+
 #define TEGRA_I2C_TIMEOUT			(msecs_to_jiffies(1000))
 #define TEGRA_I2C_RETRIES			3
 #define BYTES_PER_FIFO_WORD			4
@@ -730,6 +736,20 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_bus *i2c_bus,
 			"i2c transfer timed out, addr 0x%04x, data 0x%02x\n",
 			msg->addr, msg->buf[0]);
 
+#if defined(CONFIG_ARCH_ACER_T30)
+		dev_err(i2c_dev->dev, "reg: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+			i2c_readl(i2c_dev, I2C_CNFG), i2c_readl(i2c_dev, I2C_STATUS),
+			i2c_readl(i2c_dev, I2C_INT_STATUS),
+			i2c_readl(i2c_dev, I2C_PACKET_TRANSFER_STATUS));
+		dev_err(i2c_dev->dev, "packet: 0x%08x %u 0x%08x\n",
+			i2c_dev->packet_header, i2c_dev->payload_size,
+			i2c_dev->io_header);
+
+		/* If i2c device timed out, we try to use i2c recovery mechanism */
+		if (i2c_dev->arb_recovery)
+			i2c_dev->arb_recovery(i2c_bus->scl_gpio, i2c_bus->sda_gpio);
+#endif
+
 		tegra_i2c_init(i2c_dev);
 		return -ETIMEDOUT;
 	}
@@ -771,12 +791,30 @@ static int tegra_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	int i;
 	int ret = 0;
 
+#ifdef CONFIG_I2C_ACER_ENABLE
+	while(atomic_read(&during_suspend)) {
+		if (!is_dumped) {
+			pr_warn("[I2C] Enter tegra_i2c_xfer when I2C is during suspend.\n");
+			dump_stack();
+			is_dumped = 1;
+		}
+		msleep(1);
+	}
+#endif
+
 	rt_mutex_lock(&i2c_dev->dev_lock);
 
 	if (i2c_dev->is_suspended) {
+#ifdef CONFIG_I2C_ACER_ENABLE
+		pr_warn("[I2C] Enter tegra_i2c_xfer when system is suspended.\n");
+#endif
 		rt_mutex_unlock(&i2c_dev->dev_lock);
 		return -EBUSY;
 	}
+
+#ifdef CONFIG_I2C_ACER_ENABLE
+	atomic_set(&finished, 0);
+#endif
 
 	if (i2c_dev->last_mux != i2c_bus->mux) {
 		tegra_pinmux_set_safe_pinmux_table(i2c_dev->last_mux,
@@ -812,10 +850,19 @@ static int tegra_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 
 	tegra_i2c_clock_disable(i2c_dev);
 
+#ifndef CONFIG_I2C_ACER_ENABLE
 	rt_mutex_unlock(&i2c_dev->dev_lock);
+#endif
 
 	i2c_dev->msgs = NULL;
 	i2c_dev->msgs_num = 0;
+
+#ifdef CONFIG_I2C_ACER_ENABLE
+	atomic_set(&finished, 1);
+	is_dumped = 0;
+
+	rt_mutex_unlock(&i2c_dev->dev_lock);
+#endif
 
 	return ret ?: i;
 }
@@ -1012,6 +1059,24 @@ static int tegra_i2c_suspend_noirq(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct tegra_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
+#ifdef CONFIG_I2C_ACER_ENABLE
+	bool flag = false;
+	ktime_t t0,t1;
+	s64 usecs64;
+	int usecs;
+
+	atomic_set(&during_suspend, 1);
+	while(!atomic_read(&finished))
+	{
+		if(!flag)
+		{
+			pr_warn("[I2C] Enter the loop that wait the i2c transfer done in suspend.\n");
+			t0 = ktime_get();
+			flag = true;
+		}
+		msleep(1);
+	}
+#endif
 
 	rt_mutex_lock(&i2c_dev->dev_lock);
 
@@ -1020,6 +1085,19 @@ static int tegra_i2c_suspend_noirq(struct device *dev)
 		tegra_i2c_clock_disable(i2c_dev);
 
 	rt_mutex_unlock(&i2c_dev->dev_lock);
+
+#ifdef CONFIG_I2C_ACER_ENABLE
+	if(flag)
+	{
+		t1 = ktime_get();
+		usecs64 = ktime_to_ns(ktime_sub(t1, t0));
+		do_div(usecs64, NSEC_PER_USEC);
+		usecs = usecs64;
+		if (usecs == 0)
+			usecs = 1;
+		pr_warn("[I2C] Leave the loop that wait the i2c transfer done in suspend, msec=%ld.%03ld\n", usecs / USEC_PER_MSEC, usecs % USEC_PER_MSEC);
+	}
+#endif
 
 	return 0;
 }
@@ -1039,12 +1117,18 @@ static int tegra_i2c_resume_noirq(struct device *dev)
 
 	if (ret) {
 		rt_mutex_unlock(&i2c_dev->dev_lock);
+#ifdef CONFIG_I2C_ACER_ENABLE
+		atomic_set(&during_suspend, 0);
+#endif
 		return ret;
 	}
 
 	i2c_dev->is_suspended = false;
 
 	rt_mutex_unlock(&i2c_dev->dev_lock);
+#ifdef CONFIG_I2C_ACER_ENABLE
+	atomic_set(&during_suspend, 0);
+#endif
 
 	return 0;
 }

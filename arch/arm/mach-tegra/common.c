@@ -39,6 +39,9 @@
 #include <mach/powergate.h>
 #include <mach/system.h>
 #include <mach/tegra_smmu.h>
+#if defined(CONFIG_ARCH_ACER_T30)
+#include "board-acer-t30.h"
+#endif
 
 #include "apbio.h"
 #include "board.h"
@@ -63,6 +66,10 @@
 #define   RECOVERY_MODE	BIT(31)
 #define   BOOTLOADER_MODE	BIT(30)
 #define   FORCED_RECOVERY_MODE	BIT(1)
+#if defined(CONFIG_ARCH_ACER_T30)
+#define   EN_DEBUG_MODE 	BIT(29)
+#define   DIS_DEBUG_MODE	BIT(28)
+#endif
 
 #define AHB_GIZMO_USB		0x1c
 #define AHB_GIZMO_USB2		0x78
@@ -127,12 +134,27 @@ void tegra_assert_system_reset(char mode, const char *cmd)
 			reg |= BOOTLOADER_MODE;
 		else if (!strcmp(cmd, "forced-recovery"))
 			reg |= FORCED_RECOVERY_MODE;
+#if defined(CONFIG_ARCH_ACER_T30)
+		else if (!strcmp(cmd, "debug_on"))
+			reg |= EN_DEBUG_MODE;
+		else if (!strcmp(cmd, "debug_off"))
+			reg |= DIS_DEBUG_MODE;
+		else
+			reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE |
+				 EN_DEBUG_MODE | DIS_DEBUG_MODE);
+#else
 		else
 			reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE);
+#endif
 	}
 	else {
+#if defined(CONFIG_ARCH_ACER_T30)
+		reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE |
+			EN_DEBUG_MODE | DIS_DEBUG_MODE);
+#else
 		/* Clearing SCRATCH0 31:30:1 on default reboot */
 		reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE);
+#endif
 	}
 	writel_relaxed(reg, reset + PMC_SCRATCH0);
 	/* use *_related to avoid spinlock since caches are off */
@@ -713,6 +735,51 @@ int tegra_get_commchip_id(void)
 }
 
 __setup("commchip_id=", tegra_commchip_id);
+
+#if defined(CONFIG_ARCH_ACER_T30)
+int acer_board_type;
+int acer_board_id;
+int acer_sku;
+int acer_wifi_module;
+
+static int __init hw_ver_arg(char *options)
+{
+	int hw_ver = 0;
+	int sku_type = 0;
+	int sku_lte  = 0;
+	acer_board_type = 0;
+	acer_board_id = 0;
+	acer_sku = 0;
+	acer_wifi_module = 0;
+
+	hw_ver = simple_strtoul(options, &options, 16);
+	/*
+	 *   4bits      1byte      4bits     1bit   1bit   1bit  1bit
+	 * | sku # | board type | board id | empty | LTE | wifi | 3G |
+	 */
+
+	acer_board_type  = (hw_ver & 0xf00) >> 8;
+	acer_board_id    = (hw_ver & 0xf0) >> 4;
+	sku_type         = (hw_ver & 0x1);
+	acer_wifi_module = (hw_ver & 0x2) >> 1;
+	sku_lte          = (hw_ver & 0x4) >> 2;
+
+	if (sku_type && sku_lte)
+		acer_sku = BOARD_SKU_LTE;
+	else if (sku_type && !sku_lte)
+		acer_sku = BOARD_SKU_3G;
+	else
+		acer_sku = BOARD_SKU_WIFI;
+
+	if (acer_wifi_module == BOARD_WIFI_AH663)
+		acer_wifi_module = BOARD_WIFI_AH663;
+	else
+		acer_wifi_module = BOARD_WIFI_NH660;
+
+	return 0;
+}
+early_param("hw_ver", hw_ver_arg);
+#endif
 
 /*
  * Tegra has a protected aperture that prevents access by most non-CPU

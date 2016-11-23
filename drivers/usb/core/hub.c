@@ -1295,9 +1295,17 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	 * external hubs for now.  Enable autosuspend for USB 3.0 roothubs,
 	 * since that isn't a "real" hub.
 	 */
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (!hub_is_superspeed(hdev) || !hdev->parent) {
+		if (hdev->serial && (!strcmp(hdev->serial,"tegra-ehci.0") || !strcmp(hdev->serial,"tegra-ehci.2")))
+			usb_enable_autosuspend(hdev);
+		else
+			usb_disable_autosuspend(hdev);
+	}
+#else
 	if (!hub_is_superspeed(hdev) || !hdev->parent)
 		usb_enable_autosuspend(hdev);
-
+#endif
 	if (hdev->level == MAX_TOPO_LEVEL) {
 		dev_err(&intf->dev,
 			"Unsupported bus topology: hub nested too deep\n");

@@ -419,6 +419,10 @@ static int tegra_camera_clk_get(struct platform_device *pdev, const char *name,
 	return 0;
 }
 
+#if defined(CONFIG_ARCH_ACER_T30)
+struct tegra_camera_dev *t30_dev = NULL;
+#endif
+
 static int tegra_camera_probe(struct platform_device *pdev)
 {
 	int err;
@@ -433,6 +437,10 @@ static int tegra_camera_probe(struct platform_device *pdev)
 			__func__);
 		goto alloc_err;
 	}
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	t30_dev = dev;
+#endif
 
 	mutex_init(&dev->tegra_camera_lock);
 
@@ -574,6 +582,29 @@ static void __exit tegra_camera_exit(void)
 {
 	platform_driver_unregister(&tegra_camera_driver);
 }
+
+#if defined(CONFIG_ARCH_ACER_T30)
+// these functions should be used after tegra_camera.c finishes probing
+void extern_tegra_camera_enable_clk(void)
+{
+	if (t30_dev)
+		tegra_camera_enable_clk(t30_dev);
+}
+
+void extern_tegra_camera_disable_clk(void)
+{
+	if (t30_dev)
+		tegra_camera_disable_clk(t30_dev);
+}
+
+void extern_tegra_camera_clk_set_rate(struct tegra_camera_clk_info *clk_info)
+{
+	if (t30_dev) {
+		memcpy(&t30_dev->info, clk_info, sizeof(struct tegra_camera_clk_info));
+		tegra_camera_clk_set_rate(t30_dev);
+	}
+}
+#endif
 
 module_init(tegra_camera_init);
 module_exit(tegra_camera_exit);

@@ -28,6 +28,12 @@
 #include <linux/mmc/card.h>
 
 #include "sdhci.h"
+#if defined(CONFIG_ARCH_ACER_T30)
+#include <linux/gpio.h>
+#include <linux/platform_device.h>
+#include <mach/sdhci.h>
+#include "sdhci-pltfm.h"
+#endif
 
 #define DRIVER_NAME "sdhci"
 
@@ -1204,6 +1210,9 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct sdhci_host *host;
 	bool present;
 	unsigned long flags;
+#if defined(CONFIG_ARCH_ACER_T30)
+	struct tegra_sdhci_platform_data *plat = mmc->parent->platform_data;;
+#endif
 
 	host = mmc_priv(mmc);
 
@@ -1230,8 +1239,13 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	/* If polling, assume that the card is always present. */
 	if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION) {
+#if defined(CONFIG_ARCH_ACER_T30)
+               if (plat->cd_gpio != -1)
+                       present = !(gpio_get_value(plat->cd_gpio));
+#else
 		if (host->ops->get_cd)
 			present = host->ops->get_cd(host);
+#endif
 		else
 			present = true;
 	} else {
@@ -1854,6 +1868,12 @@ int sdhci_enable(struct mmc_host *mmc)
 	if (!mmc->card || mmc->card->type == MMC_TYPE_SDIO)
 		return 0;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (mmc->index == 0) {
+		if (host->ops->set_mmc_clk_pin)
+			host->ops->set_mmc_clk_pin(1);
+	}
+#endif
 	if (mmc->ios.clock) {
 		if (host->ops->set_clock)
 			host->ops->set_clock(host, mmc->ios.clock);
@@ -1875,6 +1895,12 @@ int sdhci_disable(struct mmc_host *mmc, int lazy)
 	if (host->ops->set_clock)
 		host->ops->set_clock(host, 0);
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (mmc->index == 0) {
+		if (host->ops->set_mmc_clk_pin)
+			host->ops->set_mmc_clk_pin(0);
+	}
+#endif
 	return 0;
 }
 
@@ -1900,8 +1926,38 @@ static void sdhci_tasklet_card(unsigned long param)
 {
 	struct sdhci_host *host;
 	unsigned long flags;
+#if defined(CONFIG_ARCH_ACER_T30)
+	struct tegra_sdhci_platform_data *plat;
+#endif
 
 	host = (struct sdhci_host*)param;
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	plat = host->mmc->parent->platform_data;
+
+	if (plat->cd_gpio != -1) {
+		if (!gpio_get_value(plat->cd_gpio)) {
+			mmc_detect_change(host->mmc, msecs_to_jiffies(1000));
+		} else {
+			spin_lock_irqsave(&host->lock, flags);
+			if (host->mrq) {
+				printk(KERN_ERR "%s: Card removed during transfer!\n",
+					mmc_hostname(host->mmc));
+				printk(KERN_ERR "%s: Resetting controller.\n",
+					mmc_hostname(host->mmc));
+
+				sdhci_reset(host, SDHCI_RESET_CMD);
+				sdhci_reset(host, SDHCI_RESET_DATA);
+
+				host->mrq->cmd->error = -ENOMEDIUM;
+				tasklet_schedule(&host->finish_tasklet);
+			}
+			spin_unlock_irqrestore(&host->lock, flags);
+			mmc_detect_change(host->mmc, msecs_to_jiffies(1000));
+		}
+		return;
+	}
+#endif
 
 	spin_lock_irqsave(&host->lock, flags);
 
@@ -2380,6 +2436,12 @@ int sdhci_resume_host(struct sdhci_host *host)
 {
 	int ret = 0;
 	struct mmc_host *mmc = host->mmc;
+#if defined(CONFIG_ARCH_ACER_T30)
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
+	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
+	struct tegra_sdhci_platform_data *plat = pdev->dev.platform_data;
+#endif
 
 	if (host->vmmc) {
 		int ret = regulator_enable(host->vmmc);
@@ -2407,6 +2469,27 @@ int sdhci_resume_host(struct sdhci_host *host)
 				if (host->card_int_set)
 					mmc->ops->enable_sdio_irq(mmc, true);
 	}
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (ret) {
+		tegra_host->card_present = 0;
+		if (tegra_host->is_rail_enabled) {
+			if (tegra_host->vdd_slot_reg)
+				regulator_disable(tegra_host->vdd_slot_reg);
+			tegra_host->is_rail_enabled = 0;
+		}
+	}
+	if (plat->cd_gpio != -1) {
+		if ((gpio_get_value(plat->cd_gpio) == 0) && (tegra_host->card_present == 0)) {
+			printk(KERN_INFO "%s was inserted in suspend mode !!\n", mmc_hostname(host->mmc));
+			tegra_host->card_present = 1;
+			if (!tegra_host->is_rail_enabled) {
+				if (tegra_host->vdd_slot_reg)
+					regulator_enable(tegra_host->vdd_slot_reg);
+				tegra_host->is_rail_enabled = 1;
+			}
+		}
+	}
+#endif
 
 	sdhci_enable_card_detection(host);
 

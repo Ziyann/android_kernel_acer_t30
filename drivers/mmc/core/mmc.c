@@ -23,6 +23,23 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
+#if defined(CONFIG_ARCH_ACER_T30)
+#define EMMC_TYPE_MAX_LEN 11
+
+static struct kobject *device_info_kobj = NULL;
+static int erase_group_def = 0;
+static int hc_erase_group_size = 0;
+static int boot_size_multi = 0;
+static unsigned int erase_grp_size = 0;
+static unsigned int erase_grp_mult = 0;
+static int emmc_size = 0;
+static char *emmc_name = NULL;
+static char emmc_type[EMMC_TYPE_MAX_LEN + 1] = "unknow type";
+static char emmc_date[EMMC_TYPE_MAX_LEN + 1] = "unknow date";
+
+#define SANDISK_X3_CID_MID 69
+#endif
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -172,6 +189,10 @@ static int mmc_decode_csd(struct mmc_card *card)
 		csd->erase_size <<= csd->write_blkbits - 9;
 	}
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	erase_grp_size = UNSTUFF_BITS(resp, 42, 5);
+	erase_grp_mult = UNSTUFF_BITS(resp, 37, 5);
+#endif
 	return 0;
 }
 
@@ -438,9 +459,57 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	else
 		card->erased_byte = 0x0;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	erase_group_def = ext_csd[EXT_CSD_ERASE_GROUP_DEF];
+	boot_size_multi = ext_csd[EXT_CSD_BOOT_MULT];
+	hc_erase_group_size = ext_csd[EXT_CSD_HC_ERASE_GRP_SIZE];
+#endif
 out:
 	return err;
 }
+
+#if defined(CONFIG_ARCH_ACER_T30)
+#define debug_attr(_name, fmt ,args...) \
+static ssize_t _name##_show (struct kobject *kobj, struct kobj_attribute *attr, char * buf)\
+{										\
+	return sprintf(buf, fmt, args);						\
+}										\
+	static struct kobj_attribute _name##_attr = {				\
+	.attr = {								\
+	.name = __stringify(_name),						\
+	.mode = 0644,								\
+	},									\
+	.show = _name##_show,							\
+	}
+
+debug_attr(BOOT_SIZE_MULTI, "%x\n", boot_size_multi);
+debug_attr(ERASE_GRP_SIZE, "0x%02x\n", erase_grp_size);
+debug_attr(ERASE_GRP_MULT, "0x%02x\n", erase_grp_mult);
+debug_attr(ERASE_GROUP_DEF, "%x\n", erase_group_def);
+debug_attr(HC_ERASE_GROUP_SIZE, "%x\n", hc_erase_group_size);
+debug_attr(type, "%s\n", emmc_type);
+debug_attr(name, "%s\n", emmc_name);
+debug_attr(size, "%d MB\n", emmc_size);
+debug_attr(date, "%s\n", emmc_date);
+
+static struct attribute * group[] = {
+	&BOOT_SIZE_MULTI_attr.attr,
+	&ERASE_GRP_SIZE_attr.attr,
+	&ERASE_GRP_MULT_attr.attr,
+	&ERASE_GROUP_DEF_attr.attr,
+	&HC_ERASE_GROUP_SIZE_attr.attr,
+	&type_attr.attr,
+	&name_attr.attr,
+	&size_attr.attr,
+	&date_attr.attr,
+	NULL,
+};
+
+static struct attribute_group attr_group =
+{
+	.attrs = group,
+};
+#endif
 
 static inline void mmc_free_ext_csd(u8 *ext_csd)
 {
@@ -703,6 +772,14 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		mmc_set_erase_size(card);
 	}
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (card->cid.manfid == SANDISK_X3_CID_MID) {
+		err = mmc_switch(card, 0x0, EXT_CSD_POWER_CLASS, 4, 0);
+		if (err)
+			printk(KERN_ERR "%s: switch power class fail \n", mmc_hostname(card->host));
+	}
+#endif
+
 	/*
 	 * If enhanced_area_en is TRUE, host needs to enable ERASE_GRP_DEF
 	 * bit.  This bit will be lost every time after a reset or power off.
@@ -918,6 +995,42 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	if (!oldcard)
 		host->card = card;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	switch (card->type) {
+		case MMC_TYPE_MMC:
+			sprintf(emmc_type, "MMC");
+			break;
+		case MMC_TYPE_SD:
+			sprintf(emmc_type, "SD");
+			break;
+		case MMC_TYPE_SDIO:
+			sprintf(emmc_type, "SDIO");
+			break;
+		case MMC_TYPE_SD_COMBO:
+			sprintf(emmc_type, "SDcombo");
+			break;
+		default:
+			sprintf(emmc_type, "unknow");
+	}
+
+	sprintf(emmc_date, "%02d/%04d", card->cid.month, card->cid.year);
+	emmc_size = card->ext_csd.sectors >> 11;
+	emmc_name = card->cid.prod_name;
+
+	if (device_info_kobj == NULL) {
+		device_info_kobj = kobject_create_and_add("dev-info_rom", NULL);
+		if (device_info_kobj == NULL) {
+			pr_warning("%s: subsystem_register failed\n",
+					mmc_hostname(card->host));
+		} else {
+			err = sysfs_create_group(device_info_kobj, &attr_group);
+			if(err) {
+				pr_warning("%s: sysfs_create_group failed\n",
+						mmc_hostname(card->host));
+			}
+		}
+	}
+#endif
 	mmc_free_ext_csd(ext_csd);
 	return 0;
 

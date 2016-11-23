@@ -287,12 +287,28 @@ static struct i2c_client *tps6591x_i2c_client;
 static void tps6591x_power_off(void)
 {
 	struct device *dev = NULL;
+	int ret;
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	printk("%s\n", __func__);
+#endif
 
 	if (!tps6591x_i2c_client)
 		return;
 
 	dev = &tps6591x_i2c_client->dev;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	/* Prevent rtc alarm after power off */
+	dev_info(&tps6591x_i2c_client->dev, "Disable RTC ALARM interrupt.\n");
+	ret = i2c_smbus_write_byte_data(tps6591x_i2c_client, TPS6591X_INT_MSK, 0xFF);
+	if (ret < 0) {
+		dev_err(&tps6591x_i2c_client->dev, "Mask RTC ALARM interrupt failed %d.\n", ret);
+		return -EIO;
+	}
+
+	pr_info("%s(): Setting power off seq\n", __func__);
+#endif
 	if (tps6591x_set_bits(dev, TPS6591X_DEVCTRL, DEVCTRL_PWR_OFF_SEQ) < 0)
 		return;
 
@@ -817,6 +833,11 @@ static int __devinit tps6591x_i2c_probe(struct i2c_client *client,
 	}
 
 	dev_info(&client->dev, "VERNUM is %02x\n", ret);
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	 /* Enable PowerKey long press shutdown */
+	i2c_smbus_write_byte_data(client, TPS6591X_DEVCTRL2, 0x36);
+#endif
 
 	tps6591x = kzalloc(sizeof(struct tps6591x), GFP_KERNEL);
 	if (tps6591x == NULL)

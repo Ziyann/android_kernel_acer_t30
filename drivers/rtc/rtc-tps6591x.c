@@ -40,6 +40,9 @@
 #define RTC_RESET_STATUS	0x16
 #define RTC_BBCH_REG		0x39
 
+#if defined(CONFIG_ARCH_ACER_T30)
+#define RTC_BBCH_DIS		0x00
+#endif
 #define RTC_BBCH_SEL		0x02
 #define RTC_BBCH_EN     	0x01
 #define ENABLE_ALARM_INT 0x8
@@ -467,7 +470,11 @@ static int __devinit tps6591x_rtc_probe(struct platform_device *pdev)
 		return -EBUSY;
 	}
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	reg = RTC_BBCH_SEL | RTC_BBCH_DIS;
+#else
 	reg = RTC_BBCH_SEL | RTC_BBCH_EN;
+#endif
 	tps6591x_write_regs(&pdev->dev, RTC_BBCH_REG, 1, &reg);
 	if (err) {
 		dev_err(&pdev->dev, "unable to program Charger reg\n");

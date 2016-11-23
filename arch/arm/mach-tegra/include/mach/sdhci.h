@@ -35,6 +35,13 @@ struct tegra_sdhci_platform_data {
 	int is_8bit;
 	int pm_flags;
 	int pm_caps;
+#if defined(CONFIG_ARCH_ACER_T30)
+	bool is_voltage_switch_supported;
+	const char *vdd_rail_name;
+	const char *slot_rail_name;
+	int vdd_max_uv;
+	int vdd_min_uv;
+#endif
 	unsigned int max_clk_limit;
 	unsigned int ddr_clk_limit;
 	unsigned int tap_delay;

@@ -3286,7 +3286,9 @@ static int fsl_udc_resume(struct platform_device *pdev)
 			if (udc_controller->transceiver->state == OTG_STATE_A_HOST)
 				return 0;
 			/* Detected VBUS set the transceiver state to device mode */
+#if !defined(CONFIG_ARCH_ACER_T30)
 			udc_controller->transceiver->state = OTG_STATE_B_PERIPHERAL;
+#endif
 		}
 	} else {
 		fsl_udc_clk_resume(true);

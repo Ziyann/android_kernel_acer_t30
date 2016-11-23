@@ -33,6 +33,11 @@
 
 #include "sdhci-pltfm.h"
 
+#if defined(CONFIG_ARCH_ACER_T30)
+#include <mach/iomap.h>
+#include <mach/pinmux.h>
+#include "../../../arch/arm/mach-tegra/gpio-names.h"
+#endif
 #define SDHCI_VENDOR_CLOCK_CNTRL	0x100
 #define SDHCI_VENDOR_CLOCK_CNTRL_SDMMC_CLK	0x1
 #define SDHCI_VENDOR_CLOCK_CNTRL_PADPIPE_CLKEN_OVERRIDE	0x8
@@ -56,8 +61,13 @@
 #define SDMMC_AUTO_CAL_CONFIG_AUTO_CAL_PU_OFFSET	0x62
 
 #define SDHOST_1V8_OCR_MASK	0x8
+#if defined(CONFIG_ARCH_ACER_T30)
+#define SDHOST_HIGH_VOLT_MIN	3300000
+#define SDHOST_HIGH_VOLT_MAX	3300000
+#else
 #define SDHOST_HIGH_VOLT_MIN	2700000
 #define SDHOST_HIGH_VOLT_MAX	3600000
+#endif
 #define SDHOST_LOW_VOLT_MIN	1800000
 #define SDHOST_LOW_VOLT_MAX	1800000
 
@@ -67,6 +77,16 @@
 
 #define SD_SEND_TUNING_PATTERN	19
 #define MAX_TAP_VALUES	256
+
+#if defined(CONFIG_ARCH_ACER_T30)
+#define	EMMC_CLK_GPIO	228
+#define	SD_DAT3	TEGRA_GPIO_PY4
+#define	SD_DAT2	TEGRA_GPIO_PY5
+#define	SD_DAT1	TEGRA_GPIO_PY6
+#define	SD_DAT0	TEGRA_GPIO_PY7
+#define	SD_CLK	TEGRA_GPIO_PZ0
+#define	SD_CMD	TEGRA_GPIO_PZ1
+#endif
 
 static unsigned int tegra_sdhost_min_freq;
 static unsigned int tegra_sdhost_std_freq;
@@ -95,6 +115,7 @@ static struct tegra_sdhci_hw_ops tegra_3x_sdhci_ops = {
 };
 #endif
 
+#if !defined(CONFIG_ARCH_ACER_T30)
 struct tegra_sdhci_host {
 	bool	clk_enabled;
 	struct regulator *vdd_io_reg;
@@ -117,6 +138,7 @@ struct tegra_sdhci_host {
 	struct clk *emc_clk;
 	unsigned int emc_max_clk;
 };
+#endif
 
 static u32 tegra_sdhci_readl(struct sdhci_host *host, int reg)
 {
@@ -318,14 +340,18 @@ static irqreturn_t carddetect_irq(int irq, void *data)
 		if (!tegra_host->is_rail_enabled) {
 			if (tegra_host->vdd_slot_reg)
 				regulator_enable(tegra_host->vdd_slot_reg);
+#if !defined(CONFIG_ARCH_ACER_T30)
 			if (tegra_host->vdd_io_reg)
 				regulator_enable(tegra_host->vdd_io_reg);
+#endif
 			tegra_host->is_rail_enabled = 1;
 		}
 	} else {
 		if (tegra_host->is_rail_enabled) {
+#if !defined(CONFIG_ARCH_ACER_T30)
 			if (tegra_host->vdd_io_reg)
 				regulator_disable(tegra_host->vdd_io_reg);
+#endif
 			if (tegra_host->vdd_slot_reg)
 				regulator_disable(tegra_host->vdd_slot_reg);
 			tegra_host->is_rail_enabled = 0;
@@ -847,6 +873,72 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci)
 	return err;
 }
 
+#if defined(CONFIG_ARCH_ACER_T30)
+static void pin_output_set(int pin , bool high)
+{
+	int rc;
+	rc= gpio_request(pin, NULL);
+	if (rc) {
+		printk(KERN_ERR "%s: gpio_request %d fail\n",__func__, pin);
+	} else {
+		tegra_gpio_enable(pin);
+		gpio_direction_output(pin, high);
+	}
+}
+
+static void pin_output_free(int pin)
+{
+	tegra_gpio_disable(pin);
+	gpio_free(pin);
+}
+
+static void set_pin_pupd_input(int pin , int pupd , int input)
+{
+	int err;
+
+	err = tegra_pinmux_set_pullupdown(pin , pupd);
+	if (err < 0)
+		printk(KERN_ERR "%s: can't set pin %d pullupdown to %d\n", __func__, pin , pupd);
+
+	err = tegra_pinmux_set_e_input_bit(pin , input);
+	if (err < 0)
+		printk(KERN_ERR "%s: can't set pin %d e_input to %d\n", __func__, pin , input);
+}
+
+static void set_sd_suspend_pins(bool suspend)
+{
+	if (suspend == 1) {
+		pin_output_set(SD_DAT3 , 0);
+		pin_output_set(SD_DAT2 , 0);
+		pin_output_set(SD_DAT1 , 0);
+		pin_output_set(SD_DAT0 , 0);
+		pin_output_set(SD_CLK , 0);
+		pin_output_set(SD_CMD , 0);
+
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_CLK , TEGRA_PUPD_NORMAL , TEGRA_E_INPUT_DISABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_CMD , TEGRA_PUPD_NORMAL , TEGRA_E_INPUT_DISABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT3 , TEGRA_PUPD_NORMAL , TEGRA_E_INPUT_DISABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT2 , TEGRA_PUPD_NORMAL , TEGRA_E_INPUT_DISABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT1 , TEGRA_PUPD_NORMAL , TEGRA_E_INPUT_DISABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT0 , TEGRA_PUPD_NORMAL , TEGRA_E_INPUT_DISABLE);
+	} else {
+		pin_output_free(SD_DAT3);
+		pin_output_free(SD_DAT2);
+		pin_output_free(SD_DAT1);
+		pin_output_free(SD_DAT0);
+		pin_output_free(SD_CLK);
+		pin_output_free(SD_CMD);
+
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_CLK , TEGRA_PUPD_NORMAL , TEGRA_E_INPUT_ENABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_CMD , TEGRA_PUPD_PULL_UP, TEGRA_E_INPUT_ENABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT3 , TEGRA_PUPD_PULL_UP , TEGRA_E_INPUT_ENABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT2 , TEGRA_PUPD_PULL_UP , TEGRA_E_INPUT_ENABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT1 , TEGRA_PUPD_PULL_UP , TEGRA_E_INPUT_ENABLE);
+		set_pin_pupd_input(TEGRA_PINGROUP_SDMMC1_DAT0 , TEGRA_PUPD_PULL_UP , TEGRA_E_INPUT_ENABLE);
+	}
+}
+#endif
+
 static int tegra_sdhci_suspend(struct sdhci_host *sdhci, pm_message_t state)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
@@ -857,13 +949,20 @@ static int tegra_sdhci_suspend(struct sdhci_host *sdhci, pm_message_t state)
 	/* Disable the power rails if any */
 	if (tegra_host->card_present) {
 		if (tegra_host->is_rail_enabled) {
+#if !defined(CONFIG_ARCH_ACER_T30)
 			if (tegra_host->vdd_io_reg)
 				regulator_disable(tegra_host->vdd_io_reg);
+#endif
 			if (tegra_host->vdd_slot_reg)
 				regulator_disable(tegra_host->vdd_slot_reg);
 			tegra_host->is_rail_enabled = 0;
 		}
 	}
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (sdhci->mmc->index == 2) {
+		set_sd_suspend_pins(1);
+	}
+#endif
 
 	if (tegra_host->dpd) {
 		mutex_lock(&tegra_host->dpd->delay_lock);
@@ -879,13 +978,21 @@ static int tegra_sdhci_resume(struct sdhci_host *sdhci)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (sdhci->mmc->index == 2) {
+		set_sd_suspend_pins(0);
+	}
+#endif
+
 	/* Enable the power rails if any */
 	if (tegra_host->card_present) {
 		if (!tegra_host->is_rail_enabled) {
 			if (tegra_host->vdd_slot_reg)
 				regulator_enable(tegra_host->vdd_slot_reg);
 			if (tegra_host->vdd_io_reg) {
+#if !defined(CONFIG_ARCH_ACER_T30)
 				regulator_enable(tegra_host->vdd_io_reg);
+#endif
 				tegra_sdhci_signal_voltage_switch(sdhci, MMC_SIGNAL_VOLTAGE_330);
 			}
 			tegra_host->is_rail_enabled = 1;
@@ -904,6 +1011,20 @@ static int tegra_sdhci_resume(struct sdhci_host *sdhci)
 	return 0;
 }
 
+#if defined(CONFIG_ARCH_ACER_T30)
+static void tegra_sdhci_set_mmc_clk_pin(bool enable)
+{
+	if (enable == 1) {
+		tegra_gpio_disable(EMMC_CLK_GPIO);
+		gpio_free(EMMC_CLK_GPIO);
+	} else {
+		gpio_request(EMMC_CLK_GPIO, "emmc clk");
+		tegra_gpio_enable(EMMC_CLK_GPIO);
+		gpio_direction_output(EMMC_CLK_GPIO, 0);
+	}
+}
+#endif
+
 static struct sdhci_ops tegra_sdhci_ops = {
 	.get_ro     = tegra_sdhci_get_ro,
 	.get_cd     = tegra_sdhci_get_cd,
@@ -918,6 +1039,9 @@ static struct sdhci_ops tegra_sdhci_ops = {
 	.set_uhs_signaling = tegra_sdhci_set_uhs_signaling,
 	.switch_signal_voltage = tegra_sdhci_signal_voltage_switch,
 	.execute_freq_tuning = sdhci_tegra_execute_tuning,
+#if defined(CONFIG_ARCH_ACER_T30)
+	.set_mmc_clk_pin = tegra_sdhci_set_mmc_clk_pin,
+#endif
 };
 
 static struct sdhci_pltfm_data sdhci_tegra_pdata = {
@@ -1009,11 +1133,13 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 			dev_err(mmc_dev(host->mmc), "request irq error\n");
 			goto err_cd_irq_req;
 		}
+#if !defined(CONFIG_ARCH_ACER_T30)
 		rc = enable_irq_wake(gpio_to_irq(plat->cd_gpio));
 		if (rc < 0)
 			dev_err(mmc_dev(host->mmc),
 				"SD card wake-up event registration"
 					"failed with eroor: %d\n", rc);
+#endif
 
 	} else if (plat->mmc_data.register_status_notify) {
 		plat->mmc_data.register_status_notify(sdhci_status_notify_cb, host);
@@ -1053,11 +1179,11 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 			tegra_host->vddio_min_uv = SDHOST_HIGH_VOLT_MIN;
 			tegra_host->vddio_max_uv = SDHOST_HIGH_VOLT_MAX;
 		}
-		tegra_host->vdd_io_reg = regulator_get(mmc_dev(host->mmc), "vddio_sdmmc");
+		tegra_host->vdd_io_reg = regulator_get(mmc_dev(host->mmc), plat->vdd_rail_name);
 		if (IS_ERR_OR_NULL(tegra_host->vdd_io_reg)) {
 			dev_info(mmc_dev(host->mmc), "%s regulator not found: %ld."
-				"Assuming vddio_sdmmc is not required.\n",
-					"vddio_sdmmc", PTR_ERR(tegra_host->vdd_io_reg));
+				"Assuming vddio_sdmmc1 is not required.\n",
+					"vddio_sdmmc1", PTR_ERR(tegra_host->vdd_io_reg));
 			tegra_host->vdd_io_reg = NULL;
 		} else {
 			rc = regulator_set_voltage(tegra_host->vdd_io_reg,
@@ -1069,7 +1195,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 			}
 		}
 
-		tegra_host->vdd_slot_reg = regulator_get(mmc_dev(host->mmc), "vddio_sd_slot");
+		tegra_host->vdd_slot_reg = regulator_get(mmc_dev(host->mmc), plat->slot_rail_name);
 		if (IS_ERR_OR_NULL(tegra_host->vdd_slot_reg)) {
 			dev_info(mmc_dev(host->mmc), "%s regulator not found: %ld."
 				" Assuming vddio_sd_slot is not required.\n",
@@ -1077,11 +1203,17 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 			tegra_host->vdd_slot_reg = NULL;
 		}
 
+#if defined(CONFIG_ARCH_ACER_T30)
+		if (tegra_host->vdd_io_reg)
+			regulator_enable(tegra_host->vdd_io_reg);
+#endif
 		if (tegra_host->card_present) {
 			if (tegra_host->vdd_slot_reg)
 				regulator_enable(tegra_host->vdd_slot_reg);
+#if !defined(CONFIG_ARCH_ACER_T30)
 			if (tegra_host->vdd_io_reg)
 				regulator_enable(tegra_host->vdd_io_reg);
+#endif
 			tegra_host->is_rail_enabled = 1;
 		}
 	}
@@ -1129,8 +1261,13 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	host->mmc->pm_caps |= MMC_PM_KEEP_POWER | MMC_PM_IGNORE_PM_NOTIFY;
 	if (plat->mmc_data.built_in) {
 		host->mmc->caps |= MMC_CAP_NONREMOVABLE;
+#if defined(CONFIG_ARCH_ACER_T30)
+		host->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
+#endif
 	}
+#if !defined(CONFIG_ARCH_ACER_T30)
 	host->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
+#endif
 
 #ifdef CONFIG_MMC_BKOPS
 	host->mmc->caps |= MMC_CAP_BKOPS;
@@ -1201,10 +1338,12 @@ static int __devexit sdhci_tegra_remove(struct platform_device *pdev)
 		regulator_put(tegra_host->vdd_slot_reg);
 	}
 
+#if !defined(CONFIG_ARCH_ACER_T30)
 	if (tegra_host->vdd_io_reg) {
 		regulator_disable(tegra_host->vdd_io_reg);
 		regulator_put(tegra_host->vdd_io_reg);
 	}
+#endif
 
 	if (gpio_is_valid(plat->wp_gpio)) {
 		tegra_gpio_disable(plat->wp_gpio);

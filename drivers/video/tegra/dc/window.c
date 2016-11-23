@@ -219,6 +219,12 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 		return -EFAULT;
 	}
 
+#ifdef CONFIG_MACH_PICASSO_MF
+	clear_bit(V_BLANK_FLIP, &dc->vblank_ref_count);
+	tegra_dc_mask_interrupt(dc,
+		FRAME_END_INT | V_BLANK_INT | ALL_UF_INT);
+#endif
+
 	tegra_dc_hold_dc_out(dc);
 
 	if (no_vsync)
@@ -399,17 +405,7 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 
 	tegra_dc_writel(dc, update_mask << 8, DC_CMD_STATE_CONTROL);
 
-	tegra_dc_writel(dc, FRAME_END_INT | V_BLANK_INT, DC_CMD_INT_STATUS);
-	if (!no_vsync) {
-		set_bit(V_BLANK_FLIP, &dc->vblank_ref_count);
-		tegra_dc_unmask_interrupt(dc,
-			FRAME_END_INT | V_BLANK_INT | ALL_UF_INT);
-	} else {
-		clear_bit(V_BLANK_FLIP, &dc->vblank_ref_count);
-		tegra_dc_mask_interrupt(dc,
-			FRAME_END_INT | V_BLANK_INT | ALL_UF_INT);
-	}
-
+#ifdef CONFIG_MACH_PICASSO_MF
 	if (dc->out->flags & TEGRA_DC_OUT_ONE_SHOT_MODE)
 		schedule_delayed_work(&dc->one_shot_work,
 				msecs_to_jiffies(dc->one_shot_delay_ms));
@@ -422,6 +418,33 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 
 	tegra_dc_writel(dc, update_mask, DC_CMD_STATE_CONTROL);
 	trace_printk("%s:update_mask=%#lx\n", dc->ndev->name, update_mask);
+#endif
+
+	tegra_dc_writel(dc, FRAME_END_INT | V_BLANK_INT, DC_CMD_INT_STATUS);
+	if (!no_vsync) {
+		set_bit(V_BLANK_FLIP, &dc->vblank_ref_count);
+		tegra_dc_unmask_interrupt(dc,
+			FRAME_END_INT | V_BLANK_INT | ALL_UF_INT);
+	} else {
+		clear_bit(V_BLANK_FLIP, &dc->vblank_ref_count);
+		tegra_dc_mask_interrupt(dc,
+			FRAME_END_INT | V_BLANK_INT | ALL_UF_INT);
+	}
+
+#ifndef CONFIG_MACH_PICASSO_MF
+	if (dc->out->flags & TEGRA_DC_OUT_ONE_SHOT_MODE)
+		schedule_delayed_work(&dc->one_shot_work,
+				msecs_to_jiffies(dc->one_shot_delay_ms));
+
+	/* update EMC clock if calculated bandwidth has changed */
+	tegra_dc_program_bandwidth(dc, false);
+
+	if (dc->out->flags & TEGRA_DC_OUT_ONE_SHOT_MODE)
+		update_mask |= NC_HOST_TRIG;
+
+	tegra_dc_writel(dc, update_mask, DC_CMD_STATE_CONTROL);
+	trace_printk("%s:update_mask=%#lx\n", dc->ndev->name, update_mask);
+#endif
 
 	tegra_dc_release_dc_out(dc);
 	mutex_unlock(&dc->lock);

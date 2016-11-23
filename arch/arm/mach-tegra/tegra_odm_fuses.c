@@ -68,11 +68,15 @@
 #define FUSE_WRITE_ACCESS	0x030
 #define FUSE_PWR_GOOD_SW	0x034
 
+#define UID_LEN 17
+
 static struct kobject *fuse_kobj;
 
 static ssize_t fuse_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
 static ssize_t fuse_store(struct kobject *kobj, struct kobj_attribute *attr,
 	const char *buf, size_t count);
+
+static ssize_t cpu_uid_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
 
 static struct kobj_attribute devkey_attr =
 	__ATTR(device_key, 0440, fuse_show, fuse_store);
@@ -100,6 +104,9 @@ static struct kobj_attribute ignore_dev_sel_straps_attr =
 
 static struct kobj_attribute odm_rsvd_attr =
 	__ATTR(odm_reserved, 0440, fuse_show, fuse_store);
+
+static struct kobj_attribute acer_cpu_id_attr =
+	__ATTR(acer_cpu_id, 0444, cpu_uid_show, NULL);
 
 static u32 fuse_pgm_data[NFUSES / 2];
 static u32 fuse_pgm_mask[NFUSES / 2];
@@ -915,6 +922,22 @@ static ssize_t fuse_show(struct kobject *kobj, struct kobj_attribute *attr, char
 	return strlen(buf);
 }
 
+static ssize_t cpu_uid_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	char uid[UID_LEN];
+
+	if (snprintf(uid, sizeof(uid), "%llx", tegra_chip_uid()) < 0)
+	{
+		pr_err("Transfer uid failed\n");
+		return 0;
+	}
+	else
+		strncpy(buf, uid, strlen(uid));
+
+	strcat(buf, "\n");
+	return strlen(buf);
+}
+
 static int __init tegra_fuse_program_init(void)
 {
 	if (!tegra_fuse_regulator_en) {
@@ -967,6 +990,7 @@ static int __init tegra_fuse_program_init(void)
 	CHK_ERR(sysfs_create_file(fuse_kobj, &sw_rsvd_attr.attr));
 	CHK_ERR(sysfs_create_file(fuse_kobj, &ignore_dev_sel_straps_attr.attr));
 	CHK_ERR(sysfs_create_file(fuse_kobj, &odm_rsvd_attr.attr));
+	CHK_ERR(sysfs_create_file(fuse_kobj, &acer_cpu_id_attr.attr));
 
 	return 0;
 }
@@ -991,6 +1015,7 @@ static void __exit tegra_fuse_program_exit(void)
 	sysfs_remove_file(fuse_kobj, &sw_rsvd_attr.attr);
 	sysfs_remove_file(fuse_kobj, &ignore_dev_sel_straps_attr.attr);
 	sysfs_remove_file(fuse_kobj, &odm_rsvd_attr.attr);
+	sysfs_remove_file(fuse_kobj, &acer_cpu_id_attr.attr);
 	kobject_del(fuse_kobj);
 }
 

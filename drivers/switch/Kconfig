@@ -13,3 +13,11 @@ config SWITCH_GPIO
 	  Say Y here to enable GPIO based switch support.
 
 endif # SWITCH
+
+config ROTATELOCK
+	tristate "RotationLock Switch support"
+	default n
+
+config SIMDETECT
+	tristate "SIM Hot-swap detection support"
+	default n

@@ -84,6 +84,7 @@
 #define   USB_USBMODE_DEVICE		(2 << 0)
 
 #define USB_SUSP_CTRL		0x400
+#define   USB_WAKE_ON_RESUME_EN	(1 << 2)
 #define   USB_WAKE_ON_CNNT_EN_DEV	(1 << 3)
 #define   USB_WAKE_ON_DISCON_EN_DEV (1 << 4)
 #define   USB_SUSP_CLR			(1 << 5)
@@ -602,7 +603,7 @@ static void utmip_setup_pmc_wake_detect(struct tegra_usb_phy *phy)
 	/* config debouncer */
 	val = readl(pmc_base + PMC_USB_DEBOUNCE);
 	val &= ~UTMIP_LINE_DEB_CNT(~0);
-	val |= UTMIP_LINE_DEB_CNT(4);
+	val |= UTMIP_LINE_DEB_CNT(1);
 	writel(val, pmc_base + PMC_USB_DEBOUNCE);
 
 	/* Make sure nothing is happening on the line with respect to PMC */
@@ -1125,7 +1126,14 @@ static int utmi_phy_open(struct tegra_usb_phy *phy)
 		return PTR_ERR(phy->utmi_pad_clk);
 	}
 
+#ifdef CONFIG_ARCH_ACER_T30
+		if (phy->inst == 0)
+			phy->utmi_xcvr_setup = 0x3F;
+		else
+			phy->utmi_xcvr_setup = utmi_phy_xcvr_setup_value(phy);
+#else
 	phy->utmi_xcvr_setup = utmi_phy_xcvr_setup_value(phy);
+#endif
 
 	parent_rate = clk_get_rate(clk_get_parent(phy->pllu_clk));
 	for (i = 0; i < ARRAY_SIZE(utmip_freq_table); i++) {
@@ -1468,19 +1476,30 @@ static int utmi_phy_power_off(struct tegra_usb_phy *phy)
 		}
 		if (enable_hotplug) {
 			val = readl(base + USB_PORTSC);
-			val |= USB_PORTSC_WKCN;
+			val &= ~(USB_PORTSC_WKOC | USB_PORTSC_WKDS | USB_PORTSC_WKCN);
+			if(check_connect_status(phy)){
+				val |= (USB_PORTSC_WKOC | USB_PORTSC_WKDS);
+			}
 			writel(val, base + USB_PORTSC);
 
 			val = readl(base + USB_SUSP_CTRL);
 			val |= USB_PHY_CLK_VALID_INT_ENB;
 			writel(val, base + USB_SUSP_CTRL);
 		} else {
+			val = readl(base + USB_PORTSC);
+			val &= ~(USB_PORTSC_WKOC | USB_PORTSC_WKDS | USB_PORTSC_WKCN);
+			writel(val, base + USB_PORTSC);
+
 			/* Disable PHY clock valid interrupts while going into suspend*/
 			val = readl(base + USB_SUSP_CTRL);
 			val &= ~USB_PHY_CLK_VALID_INT_ENB;
 			writel(val, base + USB_SUSP_CTRL);
 		}
 	}
+
+	val = readl(base + USB_SUSP_CTRL);
+	val |= USB_WAKE_ON_RESUME_EN;
+	writel(val, base + USB_SUSP_CTRL);
 
 	val = readl(base + HOSTPC1_DEVLC);
 	val |= HOSTPC1_DEVLC_PHCD;
@@ -2997,4 +3016,18 @@ int tegra3_usb_phy_init_ops(struct tegra_usb_phy *phy)
 	/* usb_phy_power_down_pmc(); */
 
 	return 0;
+}
+
+bool check_connect_status(struct tegra_usb_phy *phy)
+{
+	unsigned long val;
+	void __iomem *base = phy->regs;
+	bool port_connected;
+
+	DBG("%s(%d) inst:[%d]\n", __func__, __LINE__, phy->inst);
+
+	val = readl(base + USB_PORTSC);
+	port_connected = val & USB_PORTSC_CCS;
+
+	return port_connected;
 }

@@ -29,6 +29,31 @@ struct sdhci_pltfm_host {
 	u16 xfer_mode_shadow;
 };
 
+#if defined(CONFIG_ARCH_ACER_T30)
+struct tegra_sdhci_host {
+	bool	clk_enabled;
+	struct regulator *vdd_io_reg;
+	struct regulator *vdd_slot_reg;
+	/* Pointer to the chip specific HW ops */
+	struct tegra_sdhci_hw_ops *hw_ops;
+	/* Host controller instance */
+	unsigned int instance;
+	/* vddio_min */
+	unsigned int vddio_min_uv;
+	/* vddio_max */
+	unsigned int vddio_max_uv;
+	/* max clk supported by the platform */
+	unsigned int max_clk_limit;
+	/* max ddr clk supported by the platform */
+	unsigned int ddr_clk_limit;
+	struct tegra_io_dpd *dpd;
+	bool card_present;
+	bool is_rail_enabled;
+	struct clk *emc_clk;
+	unsigned int emc_max_clk;
+};
+#endif
+
 #ifdef CONFIG_MMC_SDHCI_BIG_ENDIAN_32BIT_BYTE_SWAPPER
 /*
  * These accessors are designed for big endian hosts doing I/O to

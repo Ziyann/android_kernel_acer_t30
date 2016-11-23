@@ -465,7 +465,9 @@ static u32 mmc_sd_num_wr_blocks(struct mmc_card *card)
 	struct mmc_request mrq = {0};
 	struct mmc_command cmd = {0};
 	struct mmc_data data = {0};
+#if !defined(CONFIG_ARCH_ACER_T30)
 	unsigned int timeout_us;
+#endif
 
 	struct scatterlist sg;
 
@@ -481,6 +483,7 @@ static u32 mmc_sd_num_wr_blocks(struct mmc_card *card)
 
 	memset(&cmd, 0, sizeof(struct mmc_command));
 
+#if !defined(CONFIG_ARCH_ACER_T30)
 	cmd.opcode = SD_APP_SEND_NUM_WR_BLKS;
 	cmd.arg = 0;
 	cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
@@ -496,12 +499,16 @@ static u32 mmc_sd_num_wr_blocks(struct mmc_card *card)
 		data.timeout_ns = 100000000;
 		data.timeout_clks = 0;
 	}
+#endif
 
 	data.blksz = 4;
 	data.blocks = 1;
 	data.flags = MMC_DATA_READ;
 	data.sg = &sg;
 	data.sg_len = 1;
+#if defined(CONFIG_ARCH_ACER_T30)
+	mmc_set_data_timeout(&data, card);
+#endif
 
 	mrq.cmd = &cmd;
 	mrq.data = &data;
@@ -1547,6 +1554,11 @@ static int mmc_blk_probe(struct mmc_card *card)
 
 #ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	mmc_set_bus_resume_policy(card->host, 1);
+#endif
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (mmc_card_sd(card)) {
+		md->disk->queue->backing_dev_info.ra_pages = 512;
+	}
 #endif
 	if (mmc_add_disk(md))
 		goto out;

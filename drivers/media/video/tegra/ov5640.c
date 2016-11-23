@@ -1,12 +1,7 @@
 /*
- * ov5640.c - ov5640 sensor driver
+ * ov5640.c - OV5640 sensor driver
  *
- * Copyright (c) 2011 - 2012, NVIDIA, All Rights Reserved.
- *
- * Contributors:
- *      Abhinav Sinha <absinha@nvidia.com>
- *
- * Leverage soc380.c
+ * Copyright (c) 2011, NVIDIA, All Rights Reserved.
  *
  * This file is licensed under the terms of the GNU General Public License
  * version 2. This program is licensed "as is" without any warranty of any
@@ -14,8 +9,8 @@
  */
 
 /**
- * SetMode Sequence for 640x480. Phase 0. Sensor Dependent.
- * This sequence should put sensor in streaming mode for 640x480
+ * SetMode Sequence for 1280x960. Phase 0. Sensor Dependent.
+ * This sequence should put sensor in streaming mode for 1280x960
  * This is usually given by the FAE or the sensor vendor.
  */
 
@@ -25,59 +20,27 @@
 #include <linux/miscdevice.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <media/tegra_camera.h>
 #include <media/ov5640.h>
-
-#include "ov5640_tables.h"
-
-/* Focuser single step & full scale transition time truth table
- * in the format of:
- *    index	mode		single step transition	full scale transition
- *	0	0			0			0
- *	1	1			50uS			51.2mS
- *	2	1			100uS			102.3mS
- *	3	1			200uS			204.6mS
- *	4	1			400uS			409.2mS
- *	5	1			800uS			818.4mS
- *	6	1			1600uS			1637.0mS
- *	7	1			3200uS			3274.0mS
- *	8	0			0			0
- *	9	2			50uS			1.1mS
- *	A	2			100uS			2.2mS
- *	B	2			200uS			4.4mS
- *	C	2			400uS			8.8mS
- *	D	2			800uS			17.6mS
- *	E	2			1600uS			35.2mS
- *	F	2			3200uS			70.4mS
- */
-
-/* pick up the mode index setting and its settle time from the above table */
-#define OV5640_VCM_DACMODE 0x3602
-#define OV5640_TRANSITION_MODE 0x0B
-#define SETTLETIME_MS 5
-
-#define POS_LOW (0)
-#define POS_HIGH (1023)
-#define FPOS_COUNT 1024
-#define FOCAL_LENGTH (10.0f)
-#define FNUMBER (2.8f)
-
-#define SIZEOF_I2C_TRANSBUF 64
+#include "ov5640_setting.h"
 
 struct ov5640_info {
 	int mode;
-	struct miscdevice miscdev_info;
 	struct i2c_client *i2c_client;
 	struct ov5640_platform_data *pdata;
-	struct ov5640_config focuser;
-	int af_fw_loaded;
-	struct kobject *kobj;
-	struct device *dev;
-	u8 i2c_trans_buf[SIZEOF_I2C_TRANSBUF];
+	int af_initialized;
+	int focus_mode;
+	int white_balance_mode;
+	int color_effect_mode;
+	int exposure_mode;
 };
+
+#define OV5640_MAX_RETRIES  3
+#define OV5640_MAX_TRANSFER_SIZE  256
 
 static int ov5640_read_reg(struct i2c_client *client, u16 addr, u8 *val)
 {
-	int err;
+	int err, retry = 0;
 	struct i2c_msg msg[2];
 	unsigned char data[3];
 
@@ -98,48 +61,58 @@ static int ov5640_read_reg(struct i2c_client *client, u16 addr, u8 *val)
 	msg[1].len = 1;
 	msg[1].buf = data + 2;
 
-	err = i2c_transfer(client->adapter, msg, 2);
+	do {
+		err = i2c_transfer(client->adapter, msg, 2);
+		if (err == 2) {
+			*val = data[2];
+			return 0;
+		}
 
-	if (err != 2)
-		return -EINVAL;
+		retry++;
+		pr_err("%s: i2c transfer failed, retrying addr=0x%04X\n", __func__, addr);
+		msleep(10);
+	} while (retry <= OV5640_MAX_RETRIES);
 
-	*val = data[2];
-
-	return 0;
+	return err;
 }
 
-#ifdef KERNEL_WARNING
-static int ov5640_write_reg(struct i2c_client *client, u8 addr, u8 value)
+static int ov5640_write_reg(struct i2c_client *client, u16 addr, u8 val)
 {
-	int count;
-	struct i2c_msg msg[1];
-	unsigned char data[4];
+	int err, retry = 0;
+	struct i2c_msg msg;
+	unsigned char data[3];
 
 	if (!client->adapter)
 		return -ENODEV;
 
-	data[0] = addr;
+	data[0] = (u8) (addr >> 8);
 	data[1] = (u8) (addr & 0xff);
-	data[2] = value;
+	data[2] = (u8) val;
 
-	msg[0].addr = client->addr;
-	msg[0].flags = 0;
-	msg[0].len = 3;
-	msg[0].buf = data;
+	msg.addr = client->addr;
+	msg.flags = 0;
+	msg.len = 3;
+	msg.buf = data;
 
-	count = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
-	if (count == ARRAY_SIZE(msg))
-		return 0;
-	dev_err(&client->dev,
-		"ov5840: i2c transfer failed, addr: %x, value: %02x\n",
-	       addr, (u32)value);
-	return -EIO;
+	do {
+		err = i2c_transfer(client->adapter, &msg, 1);
+		if (err == 1)
+			return 0;
+
+		retry++;
+		pr_err("%s: i2c transfer failed, retrying addr=0x%04X, val=0x%02X\n",
+			__func__, addr, val);
+		msleep(10);
+	} while (retry <= OV5640_MAX_RETRIES);
+
+	return err;
 }
-#endif
 
-static int ov5640_write_bulk_reg(struct i2c_client *client, u8 *data, int len)
+// the first two bytes of data[] refer to the start address
+// and the rest of data[] refers to the written data
+static int ov5640_sequential_write_reg(struct i2c_client *client, u8 *data, u16 length)
 {
-	int err;
+	int err, retry = 0;
 	struct i2c_msg msg;
 
 	if (!client->adapter)
@@ -147,75 +120,121 @@ static int ov5640_write_bulk_reg(struct i2c_client *client, u8 *data, int len)
 
 	msg.addr = client->addr;
 	msg.flags = 0;
-	msg.len = len;
+	msg.len = length;
 	msg.buf = data;
 
-	err = i2c_transfer(client->adapter, &msg, 1);
-	if (err == 1)
-		return 0;
+	do {
+		err = i2c_transfer(client->adapter, &msg, 1);
+		if (err == 1)
+			return 0;
 
-	dev_err(&client->dev, "ov5640: i2c transfer failed at %x\n",
-		(int)data[0] << 8 | data[1]);
+		retry++;
+		pr_err("%s: i2c transfer failed, retrying\n", __func__);
+		msleep(10);
+	} while (retry <= OV5640_MAX_RETRIES);
 
 	return err;
 }
 
-static int ov5640_write_table(struct ov5640_info *info,
-			      struct ov5640_reg table[],
-			      struct ov5640_reg override_list[],
-			      int num_override_regs)
+// sequential_write_table will use sequential_write_reg to sequential write the table in chunks
+// addr refers to the start address
+// table[] refers to the written data
+// length refers to the length of the written data
+static int ov5640_sequential_write_table(struct ov5640_info *info, u16 addr, u8 *table, u16 length)
 {
 	int err;
-	struct ov5640_reg *next, *n_next;
-	u8 *b_ptr = info->i2c_trans_buf;
-	unsigned int buf_filled = 0;
-	int i;
-	u16 val;
+	u16 bytes_written = 0, temp_length;
+	u8 temp_data[OV5640_MAX_TRANSFER_SIZE + 2];
 
-	for (next = table; next->addr != OV5640_TABLE_END; next++) {
-		if (next->addr == OV5640_TABLE_WAIT_MS) {
-			msleep(next->val);
-			continue;
-		}
+	while (bytes_written < length) {
+		temp_length = min(OV5640_MAX_TRANSFER_SIZE, length - bytes_written);
+		temp_data[0] = (u8) ((addr+bytes_written) >> 8);
+		temp_data[1] = (u8) ((addr+bytes_written) & 0xFF);
 
-		val = next->val;
+		memcpy(&temp_data[2], &table[bytes_written], temp_length);
 
-		/* When an override list is passed in, replace the reg */
-		/* value to write if the reg is in the list            */
-		if (override_list) {
-			for (i = 0; i < num_override_regs; i++) {
-				if (next->addr == override_list[i].addr) {
-					val = override_list[i].val;
-					break;
-				}
-			}
-		}
-
-		if (!buf_filled) {
-			b_ptr = info->i2c_trans_buf;
-			*b_ptr++ = next->addr >> 8;
-			*b_ptr++ = next->addr & 0xff;
-			buf_filled = 2;
-		}
-		*b_ptr++ = val;
-		buf_filled++;
-
-		n_next = next + 1;
-		if (n_next->addr != OV5640_TABLE_END &&
-			n_next->addr != OV5640_TABLE_WAIT_MS &&
-			buf_filled < SIZEOF_I2C_TRANSBUF &&
-			n_next->addr == next->addr + 1) {
-			continue;
-		}
-
-		err = ov5640_write_bulk_reg(info->i2c_client,
-			info->i2c_trans_buf, buf_filled);
-		if (err)
+		err = ov5640_sequential_write_reg(info->i2c_client, temp_data, temp_length+2);
+		if (err != 0) {
+			pr_err("%s failed\n", __func__);
 			return err;
+		}
 
-		buf_filled = 0;
+		bytes_written += temp_length;
 	}
+
 	return 0;
+}
+
+static int ov5640_write_table(struct ov5640_info *info, const struct ov5640_reg table[])
+{
+	int err;
+	const struct ov5640_reg *next;
+
+	pr_info("%s ++\n", __func__);
+
+	for (next=table; next->op!=OV5640_TABLE_END; next++) {
+		switch(next->op) {
+			case OV5640_WRITE_REG:
+				err = ov5640_write_reg(info->i2c_client, next->addr, next->val);
+				if (err)
+					return err;
+				break;
+
+			case OV5640_WRITE_REG_MASK:
+				// when encountering WRITE_REG_MASK, a write operation with mask is introduced
+				// the written value is stored in this entry
+				// and the data mask is stored in the next entry with op type DATA_MASK
+				// the original value is read out and only the bits under the mask will be modified
+				{
+					u8 temp, data, mask;
+
+					data = next->val;
+					mask = (next+1)->val;
+					err = ov5640_read_reg(info->i2c_client, next->addr, &temp);
+					if (err)
+						return err;
+					// clear and modify the bits under the mask
+					temp = (temp & (~mask)) | (data & mask);
+					err = ov5640_write_reg(info->i2c_client, next->addr, temp);
+					if (err)
+						return err;
+				}
+				break;
+
+			case OV5640_DATA_MASK:
+				break;
+
+			case OV5640_WAIT_MS:
+				msleep(next->val);
+				break;
+
+			default:
+				pr_err("%s: invalid op %d\n", __func__, next->op);
+				return -EINVAL;
+		}
+	}
+
+	pr_info("%s --\n", __func__);
+	return 0;
+}
+
+static inline void ov5640_writegroup_enter(struct ov5640_info *info, u8 reg_group)
+{
+	ov5640_write_reg(info->i2c_client, 0x3004, 0xDF);  // disable MCU clock
+	ov5640_write_reg(info->i2c_client, OV5640_REG_SRM_GROUP_ACCESS, reg_group);
+}
+
+static inline void ov5640_writegroup_exit(struct ov5640_info *info, u8 reg_group)
+{
+	ov5640_write_reg(info->i2c_client, 0x3004, 0xFF);  // enable MCU clock here in case group write failed
+	ov5640_write_reg(info->i2c_client, OV5640_REG_SRM_GROUP_ACCESS,
+			(reg_group | OV5640_SRM_GROUP_END_HOLD));
+}
+
+static inline void ov5640_writegroup_launch(struct ov5640_info *info, u8 reg_group)
+{
+	ov5640_write_reg(info->i2c_client, OV5640_REG_SRM_GROUP_ACCESS,
+			(reg_group | OV5640_SRM_GROUP_LAUNCH_ENABLE | OV5640_SRM_GROUP_LAUNCH));
 }
 
 static int ov5640_set_mode(struct ov5640_info *info, struct ov5640_mode *mode)
@@ -223,200 +242,496 @@ static int ov5640_set_mode(struct ov5640_info *info, struct ov5640_mode *mode)
 	int sensor_mode;
 	int err;
 
-	dev_info(info->dev, "%s: xres %u yres %u\n",
-			__func__, mode->xres, mode->yres);
-	if (!info->af_fw_loaded) {
-		err = ov5640_write_table(info, tbl_af_firmware, NULL, 0);
-		if (err)
-			return err;
-		info->af_fw_loaded = 1;
-	}
+	pr_info("%s ++: xres=%d, yres=%d\n", __func__, mode->xres, mode->yres);
 
-	if (mode->xres == 2592 && mode->yres == 1944)
+	if (mode->xres==1280 && mode->yres==960)
+		sensor_mode = OV5640_MODE_1280x960;
+	else if (mode->xres==2592 && mode->yres==1944)
 		sensor_mode = OV5640_MODE_2592x1944;
-	else if (mode->xres == 1920 && mode->yres == 1080)
+	else if (mode->xres==1920 && mode->yres==1080)
 		sensor_mode = OV5640_MODE_1920x1080;
-	else if (mode->xres == 1296 && mode->yres == 964)
-		sensor_mode = OV5640_MODE_1296x972;
 	else {
-		dev_info(info->dev, "%s: invalid resolution: %d %d\n",
-				__func__, mode->xres, mode->yres);
+		pr_err("%s: invalid resolution supplied to set mode xres=%d, yres=%d\n",
+		       __func__, mode->xres, mode->yres);
 		return -EINVAL;
 	}
 
-	err = ov5640_write_table(info, mode_table[sensor_mode],
-		NULL, 0);
+	if (info->mode == sensor_mode) {
+		pr_info("%s --\n", __func__);
+		return 0;
+	}
+
+	err = ov5640_write_table(info, mode_table[sensor_mode]);
+	if (err)
+		return err;
+
+	// If need to do auto focus based on different sensor's internal resolution configuration,
+	// this command is needed.
+	err = ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_MAIN, OV5640_RELAUNCH_FOCUS_ZONES);
 	if (err)
 		return err;
 
 	info->mode = sensor_mode;
+
+	pr_info("%s --\n", __func__);
 	return 0;
 }
 
-static int ov5640_set_af_mode(struct ov5640_info *info, u8 mode)
+static int ov5640_get_status(struct ov5640_info *info)
 {
-	dev_info(info->dev, "%s: mode %d\n", __func__, mode);
-	if (mode == OV5640_AF_INIFINITY)
-		return ov5640_write_table(info, tbl_release_focus, NULL, 0);
+	pr_info("%s\n", __func__);
 
-	if (mode == OV5640_AF_TRIGGER)
-		return ov5640_write_table(info, tbl_single_focus, NULL, 0);
-
-	return -EINVAL;
+	return 0;
 }
 
-static int ov5640_get_af_status(struct ov5640_info *info, u8 *val)
+static int ov5640_af_trigger(struct ov5640_info *info, int trigger)
 {
 	int err;
 
-	err = ov5640_read_reg(info->i2c_client, 0x3023, val);
-	if (err)
-		return -EINVAL;
+	pr_info("%s: trigger = %d\n", __func__, trigger);
 
-	dev_info(info->dev, "%s: value %02x\n", __func__, (u32)val);
-	return 0;
+	if (trigger == OV5640_AF_TRIGGER)
+		err = ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_MAIN, OV5640_TRIG_AUTO_FOCUS);
+	else
+		err = ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_MAIN, OV5640_RELEASE_FOCUS);
+
+	info->focus_mode = trigger;
+
+	return err;
 }
 
-static int ov5640_set_position(struct ov5640_info *info, u32 position)
+static int ov5640_get_af_status(struct ov5640_info *info)
 {
-	u8 data[4];
+	int af_status;
+	u8 fw_status, s_zone;
 
-	if (position < info->focuser.pos_low ||
-	    position > info->focuser.pos_high)
-		return -EINVAL;
-
-	data[0] = (OV5640_VCM_DACMODE >> 8) & 0xff;
-	data[1] = OV5640_VCM_DACMODE & 0xff;
-	data[2] = ((position & 0xf) << 4) | OV5640_TRANSITION_MODE;
-	data[3] = (position * 0x3f0) >> 4;
-	return ov5640_write_bulk_reg(info->i2c_client, data, 4);
-}
-
-static int ov5640_set_power(struct ov5640_info *info, u32 level)
-{
-	switch (level) {
-	case OV5640_POWER_LEVEL_OFF:
-	case OV5640_POWER_LEVEL_SUS:
-		if (info->pdata && info->pdata->power_off)
-			info->pdata->power_off();
-		info->af_fw_loaded = 0;
-		info->mode = 0;
-		break;
-	case OV5640_POWER_LEVEL_ON:
-		if (info->pdata && info->pdata->power_on)
-			info->pdata->power_on();
-		break;
-	default:
-		dev_err(info->dev, "unknown power level %d.\n", level);
-		return -EINVAL;
+	ov5640_read_reg(info->i2c_client, OV5640_AF_FW_STATUS, &fw_status);
+	if (fw_status == OV5640_FW_S_FOCUSING || fw_status == OV5640_FW_S_IDLE)
+		af_status = 0;  // AF is running
+	else if (fw_status == OV5640_FW_S_FOCUSED) {
+		ov5640_read_reg(info->i2c_client, OV5640_AF_CMD_PARA4, &s_zone);
+		if (s_zone)
+			af_status = 1;  // AF is completed and success
+		else
+			af_status = 2;  // AF is completed and failed
+	} else {
+		pr_err("%s: fw_status = %02X\n", __func__, fw_status);
+		af_status = -1;
 	}
 
+	return af_status;
+}
+
+static int ov5640_set_white_balance(struct ov5640_info *info, int white_balance)
+{
+	int err = 0;
+
+	pr_info("%s: white_balance = %d\n", __func__, white_balance);
+
+	ov5640_writegroup_enter(info, 0);
+
+	switch (white_balance) {
+		case OV5640_WhiteBalance_Auto:
+			err = ov5640_write_table(info, WhiteBalance_Auto);
+			break;
+
+		case OV5640_WhiteBalance_Incandescent:
+			err = ov5640_write_table(info, WhiteBalance_Incandescent);
+			break;
+
+		case OV5640_WhiteBalance_Fluorescent:
+			err = ov5640_write_table(info, WhiteBalance_Fluorescent);
+			break;
+
+		case OV5640_WhiteBalance_Daylight:
+			err = ov5640_write_table(info, WhiteBalance_Daylight);
+			break;
+
+		case OV5640_WhiteBalance_CloudyDaylight:
+			err = ov5640_write_table(info, WhiteBalance_CloudyDaylight);
+			break;
+
+		default:
+			break;
+	}
+
+	ov5640_writegroup_exit(info, 0);
+	ov5640_writegroup_launch(info, 0);
+
+	info->white_balance_mode = white_balance;
+
+	return err;
+}
+
+static int ov5640_set_color_effect(struct ov5640_info *info, int color_effect)
+{
+	int err = 0;
+
+	pr_info("%s: color_effect = %d\n", __func__, color_effect);
+
+	ov5640_writegroup_enter(info, 0);
+
+	//  white balance and color effect are both written in group write mode
+	//  but only one group can be launched at the frame boundary
+	//  a prior group would be overridden by its following one
+	//  Both white balance and color effect are written in the same write group,
+	//  so white balance needs writing again in color effect function
+	switch (info->white_balance_mode) {
+		case OV5640_WhiteBalance_Auto:
+			err = ov5640_write_table(info, WhiteBalance_Auto);
+			break;
+
+		case OV5640_WhiteBalance_Incandescent:
+			err = ov5640_write_table(info, WhiteBalance_Incandescent);
+			break;
+
+		case OV5640_WhiteBalance_Fluorescent:
+			err = ov5640_write_table(info, WhiteBalance_Fluorescent);
+			break;
+
+		case OV5640_WhiteBalance_Daylight:
+			err = ov5640_write_table(info, WhiteBalance_Daylight);
+			break;
+
+		case OV5640_WhiteBalance_CloudyDaylight:
+			err = ov5640_write_table(info, WhiteBalance_CloudyDaylight);
+			break;
+
+		default:
+			break;
+	}
+
+	switch (color_effect) {
+		case OV5640_ColorEffect_Aqua:
+			err = ov5640_write_table(info, ColorEffect_Aqua);
+			break;
+
+		case OV5640_ColorEffect_Mono:
+			err = ov5640_write_table(info, ColorEffect_Mono);
+			break;
+
+		case OV5640_ColorEffect_Negative:
+			err = ov5640_write_table(info, ColorEffect_Negative);
+			break;
+
+		case OV5640_ColorEffect_None:
+			err = ov5640_write_table(info, ColorEffect_None);
+			break;
+
+		case OV5640_ColorEffect_Sepia:
+			err = ov5640_write_table(info, ColorEffect_Sepia);
+			break;
+
+		case OV5640_ColorEffect_Solarize:
+			err = ov5640_write_table(info, ColorEffect_Solarize);
+			break;
+
+		default:
+			break;
+        }
+
+	ov5640_writegroup_exit(info, 0);
+	ov5640_writegroup_launch(info, 0);
+
+	info->color_effect_mode = color_effect;
+
+	return err;
+}
+
+static int ov5640_set_exposure(struct ov5640_info *info, int exposure)
+{
+	int err = 0;
+
+	pr_info("%s: exposure = %d\n", __func__, exposure);
+
+	switch (exposure) {
+		case OV5640_Exposure_Minus_Two:
+			err = ov5640_write_table(info, Exposure_Minus_Two);
+			break;
+
+		case OV5640_Exposure_Minus_One:
+			err = ov5640_write_table(info, Exposure_Minus_One);
+			break;
+
+		case OV5640_Exposure_Zero:
+			err = ov5640_write_table(info, Exposure_Zero);
+			break;
+
+		case OV5640_Exposure_Plus_One:
+			err = ov5640_write_table(info, Exposure_Plus_One);
+			break;
+
+		case OV5640_Exposure_Plus_Two:
+			err = ov5640_write_table(info, Exposure_Plus_Two);
+			break;
+
+		default:
+			break;
+	}
+
+	info->exposure_mode = exposure;
+
+	return err;
+}
+
+static int ov5640_capture_cmd(struct ov5640_info *info)
+{
+	pr_info("%s\n", __func__);
+
 	return 0;
 }
 
-static long ov5640_ioctl(struct file *file,
-			 unsigned int cmd, unsigned long arg)
+static int ov5640_get_exposure_time(struct ov5640_info *info, struct ov5640_rational *exposure_time)
+{
+	u8 reg_3500, reg_3501, reg_3502;
+
+	ov5640_read_reg(info->i2c_client, 0x3500, &reg_3500);
+	ov5640_read_reg(info->i2c_client, 0x3501, &reg_3501);
+	ov5640_read_reg(info->i2c_client, 0x3502, &reg_3502);
+
+	// exposure_time = sec_per_line * exposure_lines
+	// sec_per_line = 1 sec / (30 frames * 984 VTS per frame)
+	// exposure_lines = 0x3500 bit[3:0], 0x3501 bit[7:0], 0x3502 bit[7:4]
+	exposure_time->numerator = (u32)reg_3500<<12 | (u32)reg_3501<<4 | (u32)reg_3502>>4;
+	exposure_time->denominator = 29520;
+	pr_info("%s: exposure_lines = %lu\n", __func__, exposure_time->numerator);
+
+	return 0;
+}
+
+static long ov5640_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct ov5640_info *info = file->private_data;
 
 	switch (cmd) {
-	case OV5640_IOCTL_SET_SENSOR_MODE:
-	{
-		struct ov5640_mode mode;
-		if (copy_from_user(&mode,
-				   (const void __user *)arg,
-				   sizeof(struct ov5640_mode))) {
-			return -EFAULT;
+		case OV5640_IOCTL_SET_MODE:
+		{
+			struct ov5640_mode mode;
+			if (copy_from_user(&mode,
+					(const void __user *)arg,
+					sizeof(struct ov5640_mode)))
+				return -EFAULT;
+
+			return ov5640_set_mode(info, &mode);
 		}
 
-		return ov5640_set_mode(info, &mode);
-	}
-	case OV5640_IOCTL_GET_CONFIG:
-	{
-		if (copy_to_user((void __user *) arg,
-				 &info->focuser,
-				 sizeof(info->focuser))) {
-			dev_err(info->dev, "%s: 0x%x\n", __func__, __LINE__);
-			return -EFAULT;
+		case OV5640_IOCTL_GET_STATUS:
+			return ov5640_get_status(info);
+
+		case OV5640_IOCTL_AF_TRIGGER:
+			if (info->af_initialized)
+				return ov5640_af_trigger(info, arg);
+			else
+				return -1;
+
+		case OV5640_IOCTL_GET_AF_STATUS:
+			if (info->af_initialized)
+				return ov5640_get_af_status(info);
+			else
+				return -1;
+
+		case OV5640_IOCTL_SET_WHITE_BALANCE:
+			return ov5640_set_white_balance(info, arg);
+
+		case OV5640_IOCTL_SET_COLOR_EFFECT:
+			return ov5640_set_color_effect(info, arg);
+
+		case OV5640_IOCTL_SET_EXPOSURE:
+			return ov5640_set_exposure(info, arg);
+
+		case OV5640_IOCTL_CAPTURE_CMD:
+			return ov5640_capture_cmd(info);
+
+		case OV5640_IOCTL_GET_EXPOSURE_TIME:
+		{
+			struct ov5640_rational exposure_time;
+			ov5640_get_exposure_time(info, &exposure_time);
+			if (copy_to_user((void __user *)arg,
+					&exposure_time,
+					sizeof(struct ov5640_rational)))
+				return -EFAULT;
+
+			return 0;
 		}
 
-		break;
+		default:
+			pr_err("%s: invalid cmd %u\n", __func__, cmd);
+			return -EINVAL;
 	}
-	case OV5640_IOCTL_GET_AF_STATUS:
-	{
-		int err;
-		u8 val;
 
-		if (!info->af_fw_loaded) {
-			dev_err(info->dev, "OV5640 AF fw not loaded!\n");
-			break;
-		}
-
-		err = ov5640_get_af_status(info, &val);
-		if (err)
-			return err;
-
-		if (copy_to_user((void __user *) arg,
-				 &val, sizeof(val))) {
-			dev_err(info->dev, "%s: 0x%x\n", __func__, __LINE__);
-			return -EFAULT;
-		}
-		break;
-	}
-	case OV5640_IOCTL_SET_AF_MODE:
-		if (!info->af_fw_loaded) {
-			dev_err(info->dev, "OV5640 AF fw not loaded!\n");
-			break;
-		}
-		return ov5640_set_af_mode(info, (u8)arg);
-	case OV5640_IOCTL_POWER_LEVEL:
-		return ov5640_set_power(info, (u32)arg);
-	case OV5640_IOCTL_SET_FPOSITION:
-		return ov5640_set_position(info, (u32)arg);
-	case OV5640_IOCTL_GET_SENSOR_STATUS:
-	{
-		u8 status = 0;
-		if (copy_to_user((void __user *)arg, &status,
-				 1)) {
-			dev_info(info->dev, "%s %d\n", __func__, __LINE__);
-			return -EFAULT;
-		}
-		return 0;
-	}
-	default:
-		return -EINVAL;
-	}
 	return 0;
 }
+
+static int ov5640_af_initialize(struct ov5640_info *info)
+{
+	pr_info("%s\n", __func__);
+
+	// disable MCU
+	ov5640_write_reg(info->i2c_client, 0x3000, 0x20);
+
+	// write AF firmware code
+	ov5640_sequential_write_table(info, 0x8000, af_firmware_code, sizeof(af_firmware_code));
+
+	// reset all the command registers
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_MAIN,  0x00);
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_ACK,   0x00);
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_PARA0, 0x00);
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_PARA1, 0x00);
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_PARA2, 0x00);
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_PARA3, 0x00);
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_PARA4, 0x00);
+
+	// change FW_STATUS to S_FIRWARE after firmware is downloaded
+	ov5640_write_reg(info->i2c_client, OV5640_AF_FW_STATUS, OV5640_FW_S_FIRWARE);
+
+	// enable MCU
+	ov5640_write_reg(info->i2c_client, 0x3000, 0x00);
+
+	// wait for firmware initialization
+	msleep(5);
+
+	return 0;
+}
+
+static int ov5640_initialize(struct ov5640_info *info)
+{
+	int err, retry = 0;
+	u8 reg_300E;
+	u8 high_byte = 0, low_byte = 0;
+	u16 chip_id = 0;
+	u8 fw_status;
+	struct tegra_camera_clk_info clk_info;
+
+	extern void extern_tegra_camera_enable_clk(void);
+	extern void extern_tegra_camera_disable_clk(void);
+	extern void extern_tegra_camera_clk_set_rate(struct tegra_camera_clk_info *);
+
+	pr_info("%s ++\n", __func__);
+
+	// set MCLK to 24MHz
+	clk_info.id = TEGRA_CAMERA_MODULE_VI;
+	clk_info.clk_id = TEGRA_CAMERA_VI_SENSOR_CLK;
+	clk_info.rate = 24000000;
+	extern_tegra_camera_clk_set_rate(&clk_info);
+
+	// turn on MCLK and pull down PWDN pin
+	extern_tegra_camera_enable_clk();
+	if (info->pdata && info->pdata->power_on)
+		info->pdata->power_on();
+
+	// read chip_id
+	ov5640_read_reg(info->i2c_client, 0x300A, &high_byte);
+	ov5640_read_reg(info->i2c_client, 0x300B, &low_byte);
+
+	chip_id = (u16)high_byte << 8 | (u16)low_byte;
+	if (chip_id == 0x5640)
+		pr_info("%s: chip_id = 0x%04X", __func__, chip_id);
+	else {
+		pr_err("%s: wrong chip_id = 0x%04X\n", __func__, chip_id);
+		return -1;
+	}
+
+	// write initial setting
+	err = ov5640_write_table(info, mode_initial);
+	if (err)
+		return err;
+
+	// write 1280x960 key setting
+	err = ov5640_write_table(info, mode_table[OV5640_MODE_1280x960]);
+	if (err)
+		return err;
+	info->mode = OV5640_MODE_1280x960;
+
+	// fill AWB gain control registers with default values
+	// in case preview shows green in a flash in the first time launch
+	err = ov5640_write_table(info, WhiteBalance_Fluorescent);
+	if (err)
+		return err;
+
+	// AF firmware initialize
+	ov5640_af_initialize(info);
+
+	do {
+		ov5640_read_reg(info->i2c_client, OV5640_AF_FW_STATUS, &fw_status);
+		if (fw_status == OV5640_FW_S_IDLE) {
+			pr_err("%s: AF firmware is initialized\n", __func__);
+			info->af_initialized = 1;
+			break;
+
+		} else {
+			pr_err("%s: fw_status = 0x%02X, retry\n", __func__, fw_status);
+			info->af_initialized = 0;
+			ov5640_af_initialize(info);
+		}
+		retry++;
+		msleep(5);
+	} while (retry <= OV5640_MAX_RETRIES);
+
+	// 0x300E[4:3] stands for MIPI TX/RX PHY power down
+	// while in MIPI mode, set register 0x300E[4:3] to 2'b11
+	// before the PWDN pin is set to high
+	ov5640_read_reg(info->i2c_client, 0x300E, &reg_300E);
+	reg_300E |= 0x18;
+	ov5640_write_reg(info->i2c_client, 0x300E, reg_300E);
+
+	// pull high PWDN pin and turn off MCLK
+	if (info->pdata && info->pdata->power_off)
+		info->pdata->power_off();
+	extern_tegra_camera_disable_clk();
+
+	pr_info("%s --\n", __func__);
+	return 0;
+}
+
+static struct ov5640_info *info;
 
 static int ov5640_open(struct inode *inode, struct file *file)
 {
-	struct miscdevice *miscdev = file->private_data;
-	struct ov5640_info *info;
+	u8 reg_300E;
 
 	pr_info("%s\n", __func__);
-	if (!miscdev) {
-		pr_err("miscdev == NULL\n");
-		return -1;
-	}
-	info = container_of(miscdev, struct ov5640_info, miscdev_info);
+
 	file->private_data = info;
+	if (info->pdata && info->pdata->power_on)
+		info->pdata->power_on();
+
+	// 0x300E[4:3] stands for MIPI TX/RX PHY power down
+	// set register 0x300E[4:3] to 2'b00
+	ov5640_read_reg(info->i2c_client, 0x300E, &reg_300E);
+	reg_300E &= ~0x18;
+	ov5640_write_reg(info->i2c_client, 0x300E, reg_300E);
 
 	return 0;
 }
 
-int ov5640_release(struct inode *inode, struct file *file)
+static int ov5640_release(struct inode *inode, struct file *file)
 {
-	file->private_data = NULL;
+	u8 reg_300E;
+
 	pr_info("%s\n", __func__);
+
+	// release VCM to reduce power consumption
+	ov5640_write_reg(info->i2c_client, OV5640_AF_CMD_MAIN, OV5640_RELEASE_FOCUS);
+
+	// 0x300E[4:3] stands for MIPI TX/RX PHY power down
+	// while in MIPI mode, set register 0x300E[4:3] to 2'b11
+	// before the PWDN pin is set to high
+	ov5640_read_reg(info->i2c_client, 0x300E, &reg_300E);
+	reg_300E |= 0x18;
+	ov5640_write_reg(info->i2c_client, 0x300E, reg_300E);
+
+	if (info->pdata && info->pdata->power_off)
+		info->pdata->power_off();
+	file->private_data = NULL;
+
 	return 0;
 }
 
 static const struct file_operations ov5640_fileops = {
-	.owner = THIS_MODULE,
-	.open = ov5640_open,
+	.owner          = THIS_MODULE,
+	.open           = ov5640_open,
 	.unlocked_ioctl = ov5640_ioctl,
-	.release = ov5640_release,
+	.release        = ov5640_release,
 };
 
 static struct miscdevice ov5640_device = {
@@ -425,51 +740,49 @@ static struct miscdevice ov5640_device = {
 	.fops = &ov5640_fileops,
 };
 
-static int ov5640_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int ov5640_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	struct ov5640_info *info;
 	int err;
 
-	dev_info(&client->dev, "ov5640: probing sensor.\n");
+	pr_info("%s ++\n", __func__);
 
-	info = devm_kzalloc(&client->dev,
-			sizeof(struct ov5640_info), GFP_KERNEL);
+	info = kzalloc(sizeof(struct ov5640_info), GFP_KERNEL);
 	if (!info) {
-		dev_err(&client->dev, "ov5640: Unable to allocate memory!\n");
+		pr_err("%s: unable to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
 
-	memcpy(&(info->miscdev_info),
-		&ov5640_device,
-		sizeof(struct miscdevice));
+	info->pdata = client->dev.platform_data;
+	info->i2c_client = client;
 
-	err = misc_register(&(info->miscdev_info));
+	if (ov5640_initialize(info) != 0) {
+		kfree(info);
+		return -ENODEV;
+	}
+
+	err = misc_register(&ov5640_device);
 	if (err) {
-		dev_err(&client->dev,
-			"ov5640: Unable to register misc device!\n");
-		devm_kfree(&client->dev, info);
+		pr_err("%s: unable to register misc device\n", __func__);
+		kfree(info);
 		return err;
 	}
 
-	info->dev = &client->dev;
-	info->pdata = client->dev.platform_data;
-	info->i2c_client = client;
-	info->focuser.settle_time = SETTLETIME_MS;
-	info->focuser.focal_length = FOCAL_LENGTH;
-	info->focuser.fnumber = FNUMBER;
-	info->focuser.pos_low = POS_LOW;
-	info->focuser.pos_high = POS_HIGH;
-
 	i2c_set_clientdata(client, info);
+
+	pr_info("%s --\n", __func__);
 	return 0;
 }
 
 static int ov5640_remove(struct i2c_client *client)
 {
 	struct ov5640_info *info;
+
+	pr_info("%s\n", __func__);
+
 	info = i2c_get_clientdata(client);
 	misc_deregister(&ov5640_device);
+	kfree(info);
+
 	return 0;
 }
 
@@ -481,13 +794,28 @@ static const struct i2c_device_id ov5640_id[] = {
 MODULE_DEVICE_TABLE(i2c, ov5640_id);
 
 static struct i2c_driver ov5640_i2c_driver = {
-	.driver = {
-		.name = "ov5640",
+	.driver   = {
+		.name  = "ov5640",
 		.owner = THIS_MODULE,
 	},
-	.probe = ov5640_probe,
-	.remove = ov5640_remove,
+	.probe    = ov5640_probe,
+	.remove   = ov5640_remove,
 	.id_table = ov5640_id,
 };
 
-module_i2c_driver(ov5640_i2c_driver);
+static int __init ov5640_init(void)
+{
+	pr_info("%s\n", __func__);
+
+	return i2c_add_driver(&ov5640_i2c_driver);
+}
+
+static void __exit ov5640_exit(void)
+{
+	pr_info("%s\n", __func__);
+
+	i2c_del_driver(&ov5640_i2c_driver);
+}
+
+module_init(ov5640_init);
+module_exit(ov5640_exit);

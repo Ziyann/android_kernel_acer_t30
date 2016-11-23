@@ -42,7 +42,9 @@
 #include <linux/switch.h>
 #endif
 
+#if !defined(CONFIG_ARCH_ACER_T30)
 #include <mach/tegra_asoc_pdata.h>
+#endif
 
 #include <sound/core.h>
 #include <sound/jack.h>
@@ -59,6 +61,10 @@
 #include "tegra20_das.h"
 #endif
 
+#if defined(CONFIG_ARCH_ACER_T30)
+#include "acer_audio_control_t30.h"
+#endif
+
 #define DRV_NAME "tegra-snd-wm8903"
 
 #define GPIO_SPKR_EN    BIT(0)
@@ -66,6 +72,9 @@
 #define GPIO_INT_MIC_EN BIT(2)
 #define GPIO_EXT_MIC_EN BIT(3)
 #define GPIO_HP_DET     BIT(4)
+#ifdef CONFIG_ARCH_ACER_T30
+#define GPIO_BYBASS_EN  BIT(5)
+#endif
 
 struct tegra_wm8903 {
 	struct tegra_asoc_utils_data util_data;
@@ -78,6 +87,20 @@ struct tegra_wm8903 {
 #endif
 	enum snd_soc_bias_level bias_level;
 };
+
+#if defined(CONFIG_ARCH_ACER_T30)
+struct acer_audio_data audio_data;
+
+void acer_set_bypass_switch(int state)
+{
+	if (!audio_data.gpio.bypass_en)
+		return;
+
+	gpio_set_value(audio_data.gpio.bypass_en, state);
+	pr_info("audio: acer audio bypass switch state = %d \n",
+			gpio_get_value(audio_data.gpio.bypass_en));
+}
+#endif
 
 static int tegra_wm8903_hw_params(struct snd_pcm_substream *substream,
 					struct snd_pcm_hw_params *params)
@@ -365,7 +388,11 @@ static struct snd_soc_jack_gpio tegra_wm8903_hp_jack_gpio = {
 	.name = "headphone detect",
 	.report = SND_JACK_HEADPHONE,
 	.debounce_time = 150,
+#if defined(CONFIG_ARCH_ACER_T30)
+	.invert = 0,
+#else
 	.invert = 1,
+#endif
 };
 
 #ifdef CONFIG_SWITCH
@@ -379,6 +406,28 @@ enum headset_state {
 static struct switch_dev tegra_wm8903_headset_switch = {
 	.name = "h2w",
 };
+
+#if defined(CONFIG_ARCH_ACER_T30)
+int get_headset_state(void)
+{
+	return switch_get_state(&tegra_wm8903_headset_switch);
+}
+
+int acer_soc_suspend_pre(struct snd_soc_card *card)
+{
+	return 0;
+}
+
+int acer_soc_resume_post(struct snd_soc_card *card)
+{
+	int state = (int) is_hp_plugged();
+
+	if (!is_debug_on())
+		snd_soc_jack_report(&tegra_wm8903_hp_jack, state, 1);
+
+	return 0;
+}
+#endif
 
 static int tegra_wm8903_jack_notifier(struct notifier_block *self,
 			      unsigned long action, void *dev)
@@ -398,12 +447,23 @@ static int tegra_wm8903_jack_notifier(struct notifier_block *self,
 	}
 
 	switch (machine->jack_status) {
+#if defined(CONFIG_ARCH_ACER_T30)
+	case SND_JACK_HEADPHONE:
+	case SND_JACK_HEADSET:
+		if (handset_mic_detect(codec)) {
+			state = BIT_HEADSET;
+		} else {
+			state = BIT_HEADSET_NO_MIC;
+		}
+		break;
+#else
 	case SND_JACK_HEADPHONE:
 		state = BIT_HEADSET_NO_MIC;
 		break;
 	case SND_JACK_HEADSET:
 		state = BIT_HEADSET;
 		break;
+#endif
 	case SND_JACK_MICROPHONE:
 		/* mic: would not report */
 	default:
@@ -442,6 +502,10 @@ static int tegra_wm8903_event_int_spk(struct snd_soc_dapm_widget *w,
 	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
 	struct tegra_asoc_platform_data *pdata = machine->pdata;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	wm8903_event_printf(__func__, event);
+#endif
+
 	if (machine->spk_reg) {
 		if (SND_SOC_DAPM_EVENT_ON(event))
 			regulator_enable(machine->spk_reg);
@@ -466,6 +530,10 @@ static int tegra_wm8903_event_hp(struct snd_soc_dapm_widget *w,
 	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
 	struct tegra_asoc_platform_data *pdata = machine->pdata;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	wm8903_event_printf(__func__, event);
+#endif
+
 	if (!(machine->gpio_requested & GPIO_HP_MUTE))
 		return 0;
 
@@ -475,6 +543,16 @@ static int tegra_wm8903_event_hp(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+#if defined(CONFIG_ARCH_ACER_T30)
+static int tegra_wm8903_event_dock_hp(struct snd_soc_dapm_widget *w,
+					struct snd_kcontrol *k, int event)
+{
+	wm8903_event_printf(__func__, event);
+
+	return 0;
+}
+#endif
+
 static int tegra_wm8903_event_int_mic(struct snd_soc_dapm_widget *w,
 					struct snd_kcontrol *k, int event)
 {
@@ -482,6 +560,11 @@ static int tegra_wm8903_event_int_mic(struct snd_soc_dapm_widget *w,
 	struct snd_soc_card *card = dapm->card;
 	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
 	struct tegra_asoc_platform_data *pdata = machine->pdata;
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	wm8903_event_printf(__func__, event);
+#endif
+
 
 	if (machine->dmic_reg) {
 		if (SND_SOC_DAPM_EVENT_ON(event))
@@ -507,6 +590,10 @@ static int tegra_wm8903_event_ext_mic(struct snd_soc_dapm_widget *w,
 	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
 	struct tegra_asoc_platform_data *pdata = machine->pdata;
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	wm8903_event_printf(__func__, event);
+#endif
+
 	if (!(machine->gpio_requested & GPIO_EXT_MIC_EN))
 		return 0;
 
@@ -516,6 +603,16 @@ static int tegra_wm8903_event_ext_mic(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+#if defined(CONFIG_ARCH_ACER_T30)
+static const struct snd_soc_dapm_widget cardhu_dapm_widgets[] = {
+	SND_SOC_DAPM_SPK("Int Spk", tegra_wm8903_event_int_spk),
+	SND_SOC_DAPM_HP("Headphone Jack", tegra_wm8903_event_hp),
+	SND_SOC_DAPM_LINE("LineOut", tegra_wm8903_event_dock_hp),
+	SND_SOC_DAPM_MIC("Mic Jack", tegra_wm8903_event_ext_mic),
+	SND_SOC_DAPM_MIC("Int Mic", tegra_wm8903_event_int_mic),
+	SND_SOC_DAPM_LINE("LineIn", NULL),
+};
+#else
 static const struct snd_soc_dapm_widget cardhu_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Int Spk", tegra_wm8903_event_int_spk),
 	SND_SOC_DAPM_HP("Headphone Jack", tegra_wm8903_event_hp),
@@ -524,6 +621,7 @@ static const struct snd_soc_dapm_widget cardhu_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Int Mic", tegra_wm8903_event_int_mic),
 	SND_SOC_DAPM_LINE("Line In", NULL),
 };
+#endif
 
 static const struct snd_soc_dapm_widget tegra_wm8903_default_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Int Spk", tegra_wm8903_event_int_spk),
@@ -542,6 +640,26 @@ static const struct snd_soc_dapm_route harmony_audio_map[] = {
 	{"IN1L", NULL, "Mic Bias"},
 };
 
+#if defined(CONFIG_ARCH_ACER_T30)
+static const struct snd_soc_dapm_route cardhu_audio_map[] = {
+	{"Headphone Jack", NULL, "HPOUTR"},
+	{"Headphone Jack", NULL, "HPOUTL"},
+	{"Int Spk", NULL, "ROP"},
+	{"Int Spk", NULL, "RON"},
+	{"Int Spk", NULL, "LOP"},
+	{"Int Spk", NULL, "LON"},
+	{"LineOut", NULL, "LINEOUTL"},
+	{"LineOut", NULL, "LINEOUTR"},
+	{"Mic Bias", NULL, "Mic Jack"},
+	{"IN1L", NULL, "Mic Jack"},
+	{"IN1L", NULL, "Mic Jack"},
+	{"Mic Bias", NULL, "Int Mic"},
+	{"IN2L", NULL, "Int Mic"},
+	{"IN2R", NULL, "Int Mic"},
+	{"IN3L", NULL, "Int Mic"},
+	{"IN3R", NULL, "Int Mic"},
+};
+#else
 static const struct snd_soc_dapm_route cardhu_audio_map[] = {
 	{"Headphone Jack", NULL, "HPOUTR"},
 	{"Headphone Jack", NULL, "HPOUTL"},
@@ -559,6 +677,7 @@ static const struct snd_soc_dapm_route cardhu_audio_map[] = {
 	{"IN3L", NULL, "Line In"},
 	{"IN3R", NULL, "Line In"},
 };
+#endif
 
 static const struct snd_soc_dapm_route seaboard_audio_map[] = {
 	{"Headphone Jack", NULL, "HPOUTR"},
@@ -597,7 +716,12 @@ static const struct snd_kcontrol_new cardhu_controls[] = {
 	SOC_DAPM_PIN_SWITCH("LineOut"),
 	SOC_DAPM_PIN_SWITCH("Mic Jack"),
 	SOC_DAPM_PIN_SWITCH("Int Mic"),
-	SOC_DAPM_PIN_SWITCH("Line In"),
+#if defined(CONFIG_ARCH_ACER_T30)
+	SOC_DAPM_PIN_SWITCH("LineIn"),
+	SOC_DAPM_SET_PARAM("audio_source"),
+#else
+        SOC_DAPM_PIN_SWITCH("Line In"),
+#endif
 };
 
 static const struct snd_kcontrol_new tegra_wm8903_default_controls[] = {
@@ -661,7 +785,43 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 		gpio_direction_output(pdata->gpio_ext_mic_en, 0);
 	}
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	/* bypass switch enable gpio */
+	if (gpio_is_valid(pdata->gpio_bypass_switch_en)) {
+		tegra_gpio_enable(pdata->gpio_bypass_switch_en);
+		ret = gpio_request(pdata->gpio_bypass_switch_en, "bypass_switch_en");
+		if (ret) {
+			dev_err(card->dev, "cannot get bypass_switch_en gpio\n");
+			return ret;
+		}
+		machine->gpio_requested |= GPIO_BYBASS_EN;
+
+		/* Enable bypass switch; enable signal is active-high */
+		gpio_direction_output(pdata->gpio_bypass_switch_en, 0);
+	}
+#endif
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	ret = snd_soc_add_controls(codec, cardhu_controls,
+			ARRAY_SIZE(cardhu_controls));
+	if (ret < 0)
+		return ret;
+	snd_soc_dapm_new_controls(dapm, cardhu_dapm_widgets,
+			ARRAY_SIZE(cardhu_dapm_widgets));
+
+	snd_soc_dapm_add_routes(dapm, cardhu_audio_map,
+			ARRAY_SIZE(cardhu_audio_map));
+#endif
+
+#if defined(CONFIG_ARCH_ACER_T30)
+	audio_data.gpio.debug_en = pdata->gpio_debug_switch_en;
+	/* if debug on, will not enable headset */
+	if (gpio_is_valid(pdata->gpio_hp_det) && !is_debug_on()) {
+		pr_info("[Audio]register headphone jack\n");
+		audio_data.gpio.hp_det = pdata->gpio_hp_det;
+#else
 	if (gpio_is_valid(pdata->gpio_hp_det)) {
+#endif
 		tegra_wm8903_hp_jack_gpio.gpio = pdata->gpio_hp_det;
 		snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,
 				&tegra_wm8903_hp_jack);
@@ -681,6 +841,8 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 
 	snd_soc_jack_new(codec, "Mic Jack", SND_JACK_MICROPHONE,
 			 &tegra_wm8903_mic_jack);
+
+#if !defined(CONFIG_ARCH_ACER_T30)
 #ifndef CONFIG_SWITCH
 	snd_soc_jack_add_pins(&tegra_wm8903_mic_jack,
 			      ARRAY_SIZE(tegra_wm8903_mic_jack_pins),
@@ -688,6 +850,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 #else
 	snd_soc_jack_notifier_register(&tegra_wm8903_mic_jack,
 				&tegra_wm8903_jack_detect_nb);
+#endif
 #endif
 	wm8903_mic_detect(codec, &tegra_wm8903_mic_jack, SND_JACK_MICROPHONE,
 			  machine_is_cardhu() ? SND_JACK_MICROPHONE : 0);
@@ -698,6 +861,20 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 
 	snd_soc_dapm_force_enable_pin(dapm, "Mic Bias");
 
+	/* Disable Spk,Headphone,Line Out when wm8903 init */
+#if defined(CONFIG_ARCH_ACER_T30)
+	snd_soc_dapm_disable_pin(dapm, "Int Spk");
+	snd_soc_dapm_disable_pin(dapm, "Headphone Jack");
+	snd_soc_dapm_disable_pin(dapm, "LineOut");
+
+	snd_soc_dapm_disable_pin(dapm, "Mic Jack");
+	snd_soc_dapm_disable_pin(dapm, "Int Mic");
+
+	audio_data.codec = codec;
+	audio_data.gpio.spkr_en = pdata->gpio_spkr_en;
+	audio_data.gpio.int_mic_en = pdata->gpio_int_mic_en;
+	audio_data.gpio.bypass_en = pdata->gpio_bypass_switch_en;
+#else
 	/* FIXME: Calculate automatically based on DAPM routes? */
 	if (!machine_is_harmony() && !machine_is_ventana() &&
 	    !machine_is_cardhu())
@@ -720,6 +897,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 		snd_soc_dapm_nc_pin(dapm, "LINEOUTR");
 		snd_soc_dapm_nc_pin(dapm, "LINEOUTL");
 	}
+#endif
 
 	snd_soc_dapm_sync(dapm);
 
@@ -818,6 +996,10 @@ static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.resume_pre = tegra_wm8903_resume_pre,
 	//.set_bias_level = tegra30_soc_set_bias_level,
 	//.set_bias_level_post = tegra30_soc_set_bias_level_post,
+#if defined(CONFIG_ARCH_ACER_T30)
+	.suspend_pre = acer_soc_suspend_pre,
+	.resume_post = acer_soc_resume_post,
+#endif
 };
 
 static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
@@ -862,6 +1044,12 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 		}
 	}
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	tegra_wm8903_dai[0].codec_name = "wm8903.4-001a",
+	tegra_wm8903_dai[0].cpu_dai_name = "tegra30-i2s.1";
+	tegra_wm8903_dai[1].cpu_dai_name = "tegra30-spdif";
+	tegra_wm8903_dai[2].cpu_dai_name = "tegra30-i2s.3";
+#else
 	if (machine_is_cardhu()) {
 		tegra_wm8903_dai[0].codec_name = "wm8903.4-001a",
 		tegra_wm8903_dai[0].cpu_dai_name = "tegra30-i2s.1";
@@ -870,6 +1058,7 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 
 		tegra_wm8903_dai[2].cpu_dai_name = "tegra30-i2s.3";
 	}
+#endif
 
 #ifdef CONFIG_SWITCH
 	/* Addd h2w swith class support */
@@ -962,6 +1151,10 @@ static int __devexit tegra_wm8903_driver_remove(struct platform_device *pdev)
 		snd_soc_jack_free_gpios(&tegra_wm8903_hp_jack,
 					1,
 					&tegra_wm8903_hp_jack_gpio);
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (machine->gpio_requested & GPIO_BYBASS_EN)
+		gpio_free(pdata->gpio_bypass_switch_en);
+#endif
 	if (machine->gpio_requested & GPIO_EXT_MIC_EN)
 		gpio_free(pdata->gpio_ext_mic_en);
 	if (machine->gpio_requested & GPIO_INT_MIC_EN)

@@ -297,7 +297,11 @@ static int tegra30_spdif_hw_params(struct snd_pcm_substream *substream,
 
 	tegra30_spdif_disable_clocks(spdif);
 
+#if defined(CONFIG_TEGRA_HDMI)
 	ret = tegra_hdmi_setup_audio_freq_source(srate, SPDIF);
+#else
+	ret = -ENODEV;
+#endif
 	if (ret) {
 		dev_err(dev, "Can't set HDMI audio freq source: %d\n", ret);
 		return ret;

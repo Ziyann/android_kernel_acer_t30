@@ -32,6 +32,12 @@
 #include <linux/of_gpio.h>
 #include <linux/spinlock.h>
 
+#if defined(CONFIG_ARCH_ACER_T30)
+#define KEY_POWER 116
+#define POWER_KEY_ACT 0
+extern int p2_wakeup;
+#endif
+
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -331,7 +337,20 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	const struct gpio_keys_button *button = bdata->button;
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
+#if defined(CONFIG_ARCH_ACER_T30)
+	int state;
+	if ((p2_wakeup == POWER_KEY_ACT) && (button->code == KEY_POWER))
+	{
+		state = p2_wakeup ^ button->active_low;
+		p2_wakeup = 1;
+	}
+	else
+	{
+		state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
+	}
+#else
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
+#endif
 
 	if (type == EV_ABS) {
 		if (state)

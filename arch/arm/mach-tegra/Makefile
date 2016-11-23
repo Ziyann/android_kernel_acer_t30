@@ -205,3 +205,11 @@ obj-y                                   += eeprom-wifi-mac.o
 obj-${CONFIG_TEGRA_BB_XMM_POWER}        += baseband-xmm-power.o
 obj-${CONFIG_TEGRA_BB_XMM_POWER2}       += baseband-xmm-power2.o
 
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-kbc.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-panel.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-pinmux.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-power.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-sdhci.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-sensors.o
+obj-${CONFIG_ARCH_ACER_T30}             += board-acer-t30-memory.o

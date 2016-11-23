@@ -31,6 +31,7 @@ struct tegra_edid_pvt {
 	struct tegra_edid_hdmi_eld	eld;
 	bool				support_stereo;
 	bool				support_underscan;
+	bool				support_audio;
 	/* Note: dc_edid must remain the last member */
 	struct tegra_dc_edid		dc_edid;
 };
@@ -483,6 +484,7 @@ int tegra_edid_get_monspecs(struct tegra_edid *edid, struct fb_monspecs *specs)
 	mutex_lock(&edid->lock);
 	old_data = edid->data;
 	edid->data = new_data;
+	edid->data->support_audio = extension_blocks?: 0;
 	mutex_unlock(&edid->lock);
 
 	if (old_data)
@@ -494,6 +496,11 @@ int tegra_edid_get_monspecs(struct tegra_edid *edid, struct fb_monspecs *specs)
 fail:
 	vfree(new_data);
 	return ret;
+}
+
+int tegra_edid_audio_supported(struct tegra_edid *edid)
+{
+	return edid->data->support_audio;
 }
 
 int tegra_edid_underscan_supported(struct tegra_edid *edid)

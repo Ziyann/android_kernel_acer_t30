@@ -148,6 +148,11 @@ static void hsuart_power(int on)
 {
 	if (test_bit(BT_SUSPEND, &flags))
 		return;
+#if defined(CONFIG_MACH_PICASSO_M) || defined(CONFIG_MACH_PICASSO_MF)
+	return;
+#endif
+	if (bsi->uport == NULL)
+		return;
 	if (on) {
 		tegra_uart_request_clock_on(bsi->uport);
 		tegra_uart_set_mctrl(bsi->uport, TIOCM_RTS);
@@ -275,6 +280,9 @@ static int bluesleep_hci_event(struct notifier_block *this,
 
 	switch (event) {
 	case HCI_DEV_REG:
+#if defined(CONFIG_ARCH_ACER_T30)
+		gpio_set_value(bsi->ext_wake, 1);
+#endif
 		if (!bluesleep_hdev) {
 			bluesleep_hdev = hdev;
 			if (bsi->has_ext_wake == 1) {
@@ -303,6 +311,9 @@ static int bluesleep_hci_event(struct notifier_block *this,
 		bluesleep_stop();
 		bluesleep_hdev = NULL;
 		bsi->uport = NULL;
+#if defined(CONFIG_ARCH_ACER_T30)
+		gpio_set_value(bsi->ext_wake, 0);
+#endif
 		/* if bluetooth stopped, stop bluesleep also */
 		break;
 	case HCI_DEV_WRITE:
@@ -628,7 +639,7 @@ static int bluesleep_probe(struct platform_device *pdev)
 			goto free_bt_host_wake;
 
 		/* configure ext_wake as output mode*/
-		ret = gpio_direction_output(bsi->ext_wake, 1);
+		ret = gpio_direction_output(bsi->ext_wake, 0);
 		if (ret < 0) {
 			pr_err("gpio-keys: failed to configure output"
 				" direction for GPIO %d, error %d\n",
@@ -812,7 +823,7 @@ static int __init bluesleep_init(void)
 		/* initialize host wake tasklet */
 		tasklet_init(&hostwake_task, bluesleep_hostwake_task, 0);
 
-		gpio_set_value(bsi->ext_wake, 1);
+		gpio_set_value(bsi->ext_wake, 0);
 		set_bit(BT_EXT_WAKE, &flags);
 	}
 	hci_register_notifier(&hci_event_nblock);

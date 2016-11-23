@@ -31,6 +31,12 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 
+
+#if defined(CONFIG_ARCH_ACER_T30)
+#include <linux/wakelock.h>
+static struct wake_lock usb_wake_lock;
+#endif
+
 #define USB_PHY_WAKEUP		0x408
 #define  USB_ID_INT_EN		(1 << 0)
 #define  USB_ID_INT_STATUS	(1 << 1)
@@ -201,18 +207,48 @@ static void tegra_change_otg_state(struct tegra_otg_data *tegra,
 		dev_info(tegra->otg.dev, "%s --> %s\n", tegra_state_name(from),
 					      tegra_state_name(to));
 
-		if (from == OTG_STATE_A_SUSPEND) {
-			if (to == OTG_STATE_B_PERIPHERAL && otg->gadget)
-				usb_gadget_vbus_connect(otg->gadget);
-			else if (to == OTG_STATE_A_HOST)
+#if defined(CONFIG_ARCH_ACER_T30)
+               if (to == OTG_STATE_A_SUSPEND) {
+                       if (from == OTG_STATE_A_HOST)
+                               tegra_stop_host(tegra);
+                       else if (from == OTG_STATE_B_PERIPHERAL && otg->gadget) {
+                               usb_gadget_vbus_disconnect(otg->gadget);
+                               if(from != OTG_STATE_A_HOST){
+                                       wake_lock_timeout(&usb_wake_lock, 3*HZ);
+                                       printk(KERN_INFO "vbus disconnected, unlock wakelock\n");
+                               }
+                       }
+               } else if (to == OTG_STATE_B_PERIPHERAL && otg->gadget) {
+                       if (from == OTG_STATE_A_SUSPEND) {
+                               usb_gadget_vbus_connect(otg->gadget);
+                               wake_lock(&usb_wake_lock);
+                               printk(KERN_INFO "vbus connected, lock wakelock\n");
+                        }
+               } else if (to == OTG_STATE_A_HOST) {
+                       if (from == OTG_STATE_A_SUSPEND){
 				tegra_start_host(tegra);
-		} else if (from == OTG_STATE_A_HOST) {
-			if (to == OTG_STATE_A_SUSPEND)
-				tegra_stop_host(tegra);
-		} else if (from == OTG_STATE_B_PERIPHERAL && otg->gadget) {
-			if (to == OTG_STATE_A_SUSPEND)
+			}
+			else if (from == OTG_STATE_B_PERIPHERAL) {
 				usb_gadget_vbus_disconnect(otg->gadget);
-		}
+				wake_lock_timeout(&usb_wake_lock, 3*HZ);
+				printk(KERN_INFO "vbus disconnected, unlock wakelock\n");
+			}
+
+               }
+#else
+               if (from == OTG_STATE_A_SUSPEND) {
+                       if (to == OTG_STATE_B_PERIPHERAL && otg->gadget)
+                               usb_gadget_vbus_connect(otg->gadget);
+                       else if (to == OTG_STATE_A_HOST)
+                               tegra_start_host(tegra);
+               } else if (from == OTG_STATE_A_HOST) {
+                       if (to == OTG_STATE_A_SUSPEND)
+                               tegra_stop_host(tegra);
+               } else if (from == OTG_STATE_B_PERIPHERAL && otg->gadget) {
+                       if (to == OTG_STATE_A_SUSPEND)
+                               usb_gadget_vbus_disconnect(otg->gadget);
+               }
+#endif
 	}
 }
 
@@ -395,7 +431,9 @@ static int tegra_otg_probe(struct platform_device *pdev)
 	tegra->otg.set_suspend = tegra_otg_set_suspend;
 	tegra->otg.set_power = tegra_otg_set_power;
 	spin_lock_init(&tegra->lock);
-
+#if defined(CONFIG_ARCH_ACER_T30)
+	wake_lock_init(&usb_wake_lock, WAKE_LOCK_SUSPEND, "tegra-otg");
+#endif
 	if (pdata) {
 		tegra->builtin_host = !pdata->ehci_pdata->builtin_host_disabled;
 	}
@@ -533,7 +571,6 @@ static void tegra_otg_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct tegra_otg_data *tegra = platform_get_drvdata(pdev);
-	struct otg_transceiver *otg = &tegra->otg;
 	int val;
 	unsigned long flags;
 	DBG("%s(%d) BEGIN\n", __func__, __LINE__);
@@ -548,10 +585,6 @@ static void tegra_otg_resume(struct device *dev)
 	DBG("%s(%d) PHY WAKEUP register : 0x%x\n", __func__, __LINE__, val);
 	clk_disable(tegra->clk);
 
-	/* Handle if host cable is replaced with device during suspend state */
-	if (otg->state == OTG_STATE_A_HOST && (val & USB_ID_STATUS))
-		tegra_change_otg_state(tegra, OTG_STATE_A_SUSPEND);
-
 	/* Enable interrupt and call work to set to appropriate state */
 	spin_lock_irqsave(&tegra->lock, flags);
 	if (tegra->builtin_host)
@@ -561,7 +594,7 @@ static void tegra_otg_resume(struct device *dev)
 			USB_ID_PIN_WAKEUP_EN;
 
 	spin_unlock_irqrestore(&tegra->lock, flags);
-	irq_work(&tegra->work);
+	schedule_work(&tegra->work);
 
 	enable_interrupt(tegra, true);
 
