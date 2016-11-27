@@ -309,6 +309,36 @@ static void tegra_change_otg_state(struct tegra_otg_data *tegra,
 		otg->phy->state = to;
 		pr_info("otg state changed: %s --> %s\n", tegra_state_name(from), tegra_state_name(to));
 
+#if defined(CONFIG_ARCH_ACER_T30)
+               if (to == OTG_STATE_A_SUSPEND) {
+                       if (from == OTG_STATE_A_HOST) {
+                               tegra_stop_host(tegra);
+                               tegra_otg_notify_event(tegra, USB_EVENT_NONE);
+                       } else if (from == OTG_STATE_B_PERIPHERAL && otg->gadget) {
+                               usb_gadget_vbus_disconnect(otg->gadget);
+                               if (from != OTG_STATE_A_HOST) {
+                                       printk(KERN_INFO "vbus disconnected\n");
+                               }
+                       }
+               } else if (to == OTG_STATE_B_PERIPHERAL && otg->gadget) {
+                       if (from == OTG_STATE_A_SUSPEND) {
+                               usb_gadget_vbus_connect(otg->gadget);
+                               tegra_otg_notify_event(tegra, USB_EVENT_VBUS);
+                               printk(KERN_INFO "vbus connected\n");
+                        }
+               } else if (to == OTG_STATE_A_HOST) {
+                       if (from == OTG_STATE_A_SUSPEND){
+				tegra_start_host(tegra);
+				tegra_otg_notify_event(tegra, USB_EVENT_ID);
+			}
+			else if (from == OTG_STATE_B_PERIPHERAL) {
+				usb_gadget_vbus_disconnect(otg->gadget);
+				tegra_otg_notify_event(tegra, USB_EVENT_NONE);
+				printk(KERN_INFO "vbus disconnected\n");
+			}
+
+               }
+#else
 		if (from == OTG_STATE_A_SUSPEND) {
 			if (to == OTG_STATE_B_PERIPHERAL && otg->gadget) {
 				usb_gadget_vbus_connect(otg->gadget);
@@ -325,6 +355,7 @@ static void tegra_change_otg_state(struct tegra_otg_data *tegra,
 			usb_gadget_vbus_disconnect(otg->gadget);
 			tegra_otg_notify_event(tegra, USB_EVENT_NONE);
 		}
+#endif
 	}
 }
 

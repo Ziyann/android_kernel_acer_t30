@@ -1395,8 +1395,18 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	desc = intf->cur_altsetting;
 	hdev = interface_to_usbdev(intf);
 
+#if defined(CONFIG_ARCH_ACER_T30)
+	if (!hub_is_superspeed(hdev) || !hdev->parent) {
+		printk("%s: applying acer workaround\n", __func__);
+		if (hdev->serial && (!strcmp(hdev->serial,"tegra-ehci.0") || !strcmp(hdev->serial,"tegra-ehci.2")))
+			usb_enable_autosuspend(hdev);
+		else
+			usb_disable_autosuspend(hdev);
+	}
+#else
 	/* Hubs have proper suspend/resume support. */
 	usb_enable_autosuspend(hdev);
+#endif
 
 	if (hdev->level == MAX_TOPO_LEVEL) {
 		dev_err(&intf->dev,

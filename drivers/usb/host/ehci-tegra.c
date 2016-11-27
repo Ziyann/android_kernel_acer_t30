@@ -30,6 +30,9 @@
 #ifdef CONFIG_MACH_GROUPER
 #include <mach/board-grouper-misc.h>
 #endif
+#ifdef CONFIG_ARCH_ACER_T30
+#include "../../../../arch/arm/mach-tegra/tegra_usb_phy.h"
+#endif
 #include <linux/pm_qos.h>
 
 #if 0
@@ -62,6 +65,8 @@ struct tegra_ehci_hcd {
 	bool port_resuming;
 	unsigned int irq;
 	bool bus_suspended_fail;
+	bool device_connect;
+	bool device_suspend;
 	bool unaligned_dma_buf_supported;
 	bool has_hostpc;
 #ifdef CONFIG_TEGRA_EHCI_BOOST_CPU_FREQ
@@ -400,11 +405,16 @@ static int tegra_ehci_bus_suspend(struct usb_hcd *hcd)
 
 	mutex_lock(&tegra->sync_lock);
 	tegra->bus_suspended_fail = false;
+	tegra->device_connect = false;
 	err = ehci_bus_suspend(hcd);
 	if (err)
 		tegra->bus_suspended_fail = true;
-	else
-		usb_phy_set_suspend(get_usb_phy(tegra->phy), 1);
+	else {
+		tegra->device_connect = check_connect_status(tegra->phy);
+		if (tegra->device_connect){
+			usb_phy_set_suspend(get_usb_phy(tegra->phy), 1);
+		}
+	}
 	mutex_unlock(&tegra->sync_lock);
 	EHCI_DBG("%s() END\n", __func__);
 
@@ -425,9 +435,12 @@ static int tegra_ehci_bus_resume(struct usb_hcd *hcd)
 #endif
 
 	mutex_lock(&tegra->sync_lock);
-	usb_phy_set_suspend(get_usb_phy(tegra->phy), 0);
+	if (tegra->device_suspend)
+		usb_phy_set_suspend(get_usb_phy(tegra->phy), 0);
 	err = ehci_bus_resume(hcd);
 	mutex_unlock(&tegra->sync_lock);
+	if (!err)
+		tegra->device_suspend = false;
 	EHCI_DBG("%s() END\n", __func__);
 
 	return err;
@@ -633,6 +646,8 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 	tegra->cpu_boost_in_work = true;
 #endif
 
+	tegra->device_suspend = false;
+
 	return err;
 
 fail_phy:
@@ -671,6 +686,8 @@ static int tegra_ehci_suspend(struct platform_device *pdev, pm_message_t state)
 		return -EBUSY;
 	else {
 		err = tegra_usb_phy_power_off(tegra->phy);
+		if (!err)
+			tegra->device_suspend = true;
 		if (pdata->u_data.host.turn_off_vbus_on_lp0 &&
 			pdata->port_otg) {
 			tegra_usb_enable_vbus(tegra->phy, false);

@@ -86,6 +86,7 @@
 #define   USB_USBMODE_DEVICE		(2 << 0)
 
 #define USB_SUSP_CTRL		0x400
+#define USB_WAKE_ON_RESUME_EN (1 << 2)
 #define   USB_WAKE_ON_CNNT_EN_DEV	(1 << 3)
 #define   USB_WAKE_ON_DISCON_EN_DEV (1 << 4)
 #define   USB_SUSP_CLR			(1 << 5)
@@ -1437,6 +1438,22 @@ static int utmi_phy_pre_resume(struct tegra_usb_phy *phy, bool remote_wakeup)
 	return 0;
 }
 
+bool check_connect_status(struct tegra_usb_phy *phy)
+{
+	unsigned long val;
+	void __iomem *base = phy->regs;
+	bool port_connected;
+
+	DBG("%s(%d) inst:[%d]\n", __func__, __LINE__, phy->inst);
+
+	val = readl(base + USB_PORTSC);
+	port_connected = val & USB_PORTSC_CCS;
+
+	printk("%s: %d\n", __func__, port_connected);
+
+	return port_connected;
+}
+
 static int utmi_phy_power_off(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
@@ -1512,22 +1529,30 @@ static int utmi_phy_power_off(struct tegra_usb_phy *phy)
 		if (enable_hotplug) {
 			/* Enable wakeup event of device plug-in/plug-out */
 			val = readl(base + USB_PORTSC);
-			if (val & USB_PORTSC_CCS)
-				val |= USB_PORTSC_WKDS;
-			else
-				val |= USB_PORTSC_WKCN;
+			val &= ~(USB_PORTSC_WKOC | USB_PORTSC_WKDS | USB_PORTSC_WKCN);
+			if(check_connect_status(phy)){
+				val |= (USB_PORTSC_WKOC | USB_PORTSC_WKDS);
+			}
 			writel(val, base + USB_PORTSC);
 
 			val = readl(base + USB_SUSP_CTRL);
 			val |= USB_PHY_CLK_VALID_INT_ENB;
 			writel(val, base + USB_SUSP_CTRL);
 		} else {
+			val = readl(base + USB_PORTSC);
+			val &= ~(USB_PORTSC_WKOC | USB_PORTSC_WKDS | USB_PORTSC_WKCN);
+			writel(val, base + USB_PORTSC);
+
 			/* Disable PHY clock valid interrupts while going into suspend*/
 			val = readl(base + USB_SUSP_CTRL);
 			val &= ~USB_PHY_CLK_VALID_INT_ENB;
 			writel(val, base + USB_SUSP_CTRL);
 		}
 	}
+
+	val = readl(base + USB_SUSP_CTRL);
+	val |= USB_WAKE_ON_RESUME_EN;
+	writel(val, base + USB_SUSP_CTRL);
 
 	/* Disable PHY clock */
 	val = readl(base + HOSTPC1_DEVLC);

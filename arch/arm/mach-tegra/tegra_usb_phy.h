@@ -118,5 +118,7 @@ int tegra3_usb_phy_init_ops(struct tegra_usb_phy *phy);
 int tegra2_usb_phy_init_ops(struct tegra_usb_phy *phy);
 int tegra11x_usb_phy_init_ops(struct tegra_usb_phy *phy);
 
+bool check_connect_status(struct tegra_usb_phy *phy);
+
 
 #endif /* __MACH_TEGRA_USB_PHY_H */
