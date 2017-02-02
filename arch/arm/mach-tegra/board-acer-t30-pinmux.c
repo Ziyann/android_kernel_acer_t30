@@ -69,7 +69,6 @@ extern int acer_sku;
 		.slew_falling = TEGRA_SLEW_##_pullup_slew,	\
 	}
 
-/* !!!FIXME!!!! POPULATE THIS TABLE */
 static __initdata struct tegra_drive_pingroup_config cardhu_drive_pinmux[] = {
 	/* DEFAULT_DRIVE(<pin_group>), */
 	/* SET_DRIVE(ATA, DISABLE, DISABLE, DIV_1, 31, 31, FAST, FAST) */
@@ -174,16 +173,16 @@ static __initdata struct tegra_pingroup_config picasso2_pinmux_common[] = {
 	DEFAULT_PINMUX(SPI1_MISO,       SPI1,            PULL_DOWN,     TRISTATE,   INPUT), // GI
 	DEFAULT_PINMUX(SPI1_MOSI,       SPI1,            NORMAL,        NORMAL,     OUTPUT), // G (NC)
 	DEFAULT_PINMUX(SPI1_SCK,        SPI1,            NORMAL,        NORMAL,     OUTPUT), // G (NC)
-	DEFAULT_PINMUX(SPI2_CS0_N,      SPI2,            NORMAL,        TRISTATE,   INPUT), // GI
+	DEFAULT_PINMUX(SPI2_CS0_N,      SPI2,            PULL_UP,       TRISTATE,   INPUT), // GI
 	DEFAULT_PINMUX(SPI2_CS1_N,      SPI2,            PULL_UP,       TRISTATE,   INPUT), // GI
 	DEFAULT_PINMUX(SPI2_CS2_N,      SPI2,            PULL_DOWN,     TRISTATE,   INPUT), // GI
 	DEFAULT_PINMUX(SPI2_MISO,       SPI2,            NORMAL,        TRISTATE,   INPUT), // GI
-	DEFAULT_PINMUX(SPI2_MOSI,       SPI2,            NORMAL,        NORMAL,     OUTPUT), // G
+	DEFAULT_PINMUX(SPI2_MOSI,       SPI6,            NORMAL,        NORMAL,     INPUT), // G
 	DEFAULT_PINMUX(SPI2_SCK,        SPI2,            NORMAL,        NORMAL,     OUTPUT), // G (NC)
 	DEFAULT_PINMUX(DAP3_DIN,        I2S2,            NORMAL,        NORMAL,     OUTPUT), //G
 	DEFAULT_PINMUX(DAP3_DOUT,       RSVD1,           NORMAL,        NORMAL,     OUTPUT), //G
 	DEFAULT_PINMUX(DAP3_FS,         RSVD1,           NORMAL,        NORMAL,     OUTPUT), //G
-	DEFAULT_PINMUX(DAP3_SCLK,       I2S2,            PULL_DOWN,     NORMAL,     OUTPUT), //G
+	DEFAULT_PINMUX(DAP3_SCLK,       RSVD1,           NORMAL,        NORMAL,     OUTPUT), //G
 	DEFAULT_PINMUX(GPIO_PV0,        RSVD,            NORMAL,        TRISTATE,   INPUT), // GI
 	DEFAULT_PINMUX(GPIO_PV1,        RSVD,            NORMAL,        TRISTATE,   INPUT), // GI
 	DEFAULT_PINMUX(ULPI_CLK,        UARTD,           NORMAL,        NORMAL,     OUTPUT), // Function o
@@ -192,7 +191,7 @@ static __initdata struct tegra_pingroup_config picasso2_pinmux_common[] = {
 	DEFAULT_PINMUX(ULPI_DATA2,      UARTA,           NORMAL,        NORMAL,     OUTPUT), // G (NC)
 	DEFAULT_PINMUX(ULPI_DATA3,      UARTA,           NORMAL,        TRISTATE,   INPUT), // GI
 	DEFAULT_PINMUX(ULPI_DATA4,      UARTA,           PULL_UP,       NORMAL,     INPUT), // GI
-	DEFAULT_PINMUX(ULPI_DATA5,      UARTA,           NORMAL,        NORMAL,     OUTPUT), // G (NC)
+	DEFAULT_PINMUX(ULPI_DATA5,      UARTA,           PULL_UP,       NORMAL,     INPUT), // G (NC)
 	DEFAULT_PINMUX(ULPI_DATA6,      UARTA,           NORMAL,        NORMAL,     OUTPUT), // G (NC)
 	DEFAULT_PINMUX(ULPI_DATA7,      UARTA,           NORMAL,        NORMAL,     OUTPUT), // G (NC)
 	DEFAULT_PINMUX(ULPI_DIR,        UARTD,           NORMAL,        NORMAL,     INPUT), // Function
@@ -236,7 +235,7 @@ static __initdata struct tegra_pingroup_config picasso2_pinmux_common[] = {
 	DEFAULT_PINMUX(GMI_AD12,        NAND,            NORMAL,        TRISTATE,   INPUT), //GI
 	DEFAULT_PINMUX(GMI_AD13,        NAND,            NORMAL,        TRISTATE,   INPUT), //GI
 	DEFAULT_PINMUX(GMI_AD14,        NAND,            NORMAL,        TRISTATE,   INPUT), //GI
-	DEFAULT_PINMUX(GMI_AD15,        NAND,            NORMAL,        NORMAL,     INPUT), //G
+	DEFAULT_PINMUX(GMI_AD15,        NAND,            PULL_DOWN,     NORMAL,     OUTPUT), //G
 	DEFAULT_PINMUX(GMI_ADV_N,       NAND,            NORMAL,        TRISTATE,   INPUT), //GI
 	DEFAULT_PINMUX(GMI_CLK,         NAND,            NORMAL,        TRISTATE,   INPUT), //GI
 	DEFAULT_PINMUX(GMI_CS0_N,       NAND,            PULL_UP,       TRISTATE,   INPUT), //GI
@@ -420,20 +419,6 @@ static __initdata struct tegra_pingroup_config cardhu_pinmux_dock_internal_pull_
 	DEFAULT_PINMUX(GPIO_PBB6,       VGP6,            PULL_UP,   NORMAL,     INPUT),
 };
 
-static __initdata struct tegra_pingroup_config cardhu_pinmux_sensor_dvt2[] = {
-	DEFAULT_PINMUX(DAP3_SCLK,       I2S2,            PULL_DOWN,    NORMAL,     OUTPUT), //G
-	DEFAULT_PINMUX(SPI2_CS0_N,      SPI2,            PULL_UP,   TRISTATE,     INPUT), // GI
-};
-
-/* Clone from cardhu_pinmux_e1291_a04 */
-static __initdata struct tegra_pingroup_config acer_t30_pinmux[] = {
-	DEFAULT_PINMUX(GMI_AD15,        NAND,            PULL_DOWN,   NORMAL,   OUTPUT),
-	DEFAULT_PINMUX(ULPI_DATA5,      UARTA,           PULL_UP,   NORMAL,     INPUT),
-	DEFAULT_PINMUX(ULPI_DATA6,      UARTA,           NORMAL,    NORMAL,     OUTPUT),
-	DEFAULT_PINMUX(SPI2_MOSI,       SPI6,            NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(DAP3_SCLK,       RSVD1,           NORMAL,    NORMAL,     OUTPUT),
-};
-
 static void __init cardhu_audio_gpio_init(void)
 {
 	int ret = gpio_request(TEGRA_GPIO_CDC_IRQ, "wm8903");
@@ -505,41 +490,17 @@ int __init cardhu_pinmux_init(void)
 	tegra30_default_pinmux();
 
         /* common pinmux connfiguration */
-	switch (acer_board_type) {
-	case BOARD_PICASSO_M:
-	case BOARD_PICASSO_MF:
-		tegra_pinmux_config_table(picasso2_pinmux_common, ARRAY_SIZE(picasso2_pinmux_common));
-		break;
-	}
+	tegra_pinmux_config_table(picasso2_pinmux_common, ARRAY_SIZE(picasso2_pinmux_common));
 
-	switch (acer_board_type) {
-	case BOARD_PICASSO_M:
+	if (acer_board_type == BOARD_PICASSO_M)
 		tegra_pinmux_config_table(cardhu_pinmux_dock_internal_pull_up,
 					ARRAY_SIZE(cardhu_pinmux_dock_internal_pull_up));
-		tegra_pinmux_config_table(cardhu_pinmux_sensor_dvt2,
-					ARRAY_SIZE(cardhu_pinmux_sensor_dvt2));
-		break;
-	case BOARD_PICASSO_MF:
-		tegra_pinmux_config_table(cardhu_pinmux_sensor_dvt2,
-					ARRAY_SIZE(cardhu_pinmux_sensor_dvt2));
-		break;
-	}
+
 	tegra_drive_pinmux_config_table(cardhu_drive_pinmux,
 					ARRAY_SIZE(cardhu_drive_pinmux));
-	tegra_pinmux_config_table(acer_t30_pinmux,
-					ARRAY_SIZE(acer_t30_pinmux));
 
 	return 0;
 }
-
-#define PIN_GPIO_LPM(_name, _gpio, _is_input, _value)	\
-	{					\
-		.name		= _name,	\
-		.gpio_nr	= _gpio,	\
-		.is_gpio	= true,		\
-		.is_input	= _is_input,	\
-		.value		= _value,	\
-	}
 
 struct gpio_init_pin_info pin_lpm_cardhu_common[] = {
 };

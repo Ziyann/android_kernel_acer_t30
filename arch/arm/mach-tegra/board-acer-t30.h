@@ -154,7 +154,6 @@ int cardhu_gpio_init(void);
 int acer_panel_init(void);
 int cardhu_sensors_init(void);
 int cardhu_kbc_init(void);
-int cardhu_scroll_init(void);
 int cardhu_keys_init(void);
 int cardhu_pins_state_init(void);
 int cardhu_emc_init(void);

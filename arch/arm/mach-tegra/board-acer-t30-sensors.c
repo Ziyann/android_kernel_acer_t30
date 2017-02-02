@@ -56,9 +56,7 @@
 #include "cpu-tegra.h"
 #include "devices.h"
 
-#ifdef CONFIG_STK2203_LIGHT_SENSOR
 #define STK_INTR TEGRA_GPIO_PX3
-#endif
 
 #ifdef CONFIG_VIDEO_OV5640_ACER
 #include <media/ov5640.h>
@@ -66,11 +64,6 @@
 #ifdef CONFIG_VIDEO_OV9740
 #include <media/ov9740.h>
 #endif
-#ifdef CONFIG_VIDEO_YUV
-#include <media/yuv_sensor.h>
-#endif
-
-static struct board_info board_info;
 
 struct camera_gpio {
 	int gpio;
@@ -102,9 +95,6 @@ static struct camera_gpio camera_gpio_table[] = {
 
 #define OV9740_CAM_PWDN   camera_gpio_table[4].gpio  // 2M_CAM_PWDN
 #define OV9740_CAM_RST    camera_gpio_table[5].gpio  // 2M_CAM_RST#
-
-#define MT9D115_CAM_PWDN  camera_gpio_table[2].gpio  // 2M_CAM_PWDN
-#define MT9D115_CAM_RST   camera_gpio_table[3].gpio  // 2M_CAM_RST#
 
 static int cardhu_camera_init(void)
 {
@@ -154,11 +144,9 @@ fail:
 	return ret;
 }
 
-#if defined(CONFIG_VIDEO_OV5640_ACER)
+#ifdef CONFIG_VIDEO_OV5640_ACER
 static int cardhu_ov5640_power_on(struct device *dev)
 {
-	pr_info("%s\n", __func__);
-
 	gpio_direction_output(OV5640_CAM_PWDN, 0);
 	msleep(20);
 
@@ -167,8 +155,6 @@ static int cardhu_ov5640_power_on(struct device *dev)
 
 static int cardhu_ov5640_power_off(struct device *dev)
 {
-	pr_info("%s\n", __func__);
-
 	gpio_direction_output(OV5640_CAM_PWDN, 1);
 
 	return 0;
@@ -180,11 +166,9 @@ static struct ov5640_platform_data cardhu_ov5640_data = {
 };
 #endif
 
-#if defined(CONFIG_VIDEO_OV9740)
+#ifdef CONFIG_VIDEO_OV9740
 static int cardhu_ov9740_power_on(void)
 {
-	pr_info("%s\n", __func__);
-
 	gpio_direction_output(OV9740_CAM_PWDN, 0);
 	msleep(20);
 
@@ -193,8 +177,6 @@ static int cardhu_ov9740_power_on(void)
 
 static int cardhu_ov9740_power_off(void)
 {
-	pr_info("%s\n", __func__);
-
 	gpio_direction_output(OV9740_CAM_PWDN, 1);
 
 	return 0;
@@ -206,63 +188,21 @@ static struct ov9740_platform_data cardhu_ov9740_data = {
 };
 #endif
 
-#ifdef CONFIG_VIDEO_YUV
-static int cardhu_mt9d115_power_on(void)
-{
-	pr_info("%s\n", __func__);
-
-	// do MT9D115 hardware reset and enter hardware standby mode
-	gpio_direction_output(MT9D115_CAM_RST,  0);
-	msleep(1);
-	gpio_direction_output(MT9D115_CAM_RST,  1);
-	msleep(1);
-
-	gpio_direction_output(MT9D115_CAM_PWDN, 0);
-	// TODO: fine tune the delay time
-	msleep(20);
-
-	return 0;
-}
-
-static int cardhu_mt9d115_power_off(void)
-{
-	pr_info("%s\n", __func__);
-
-	gpio_direction_output(MT9D115_CAM_PWDN, 1);
-	// standby time need 2 frames
-	msleep(150);
-
-	return 0;
-}
-
-struct yuv_sensor_platform_data cardhu_mt9d115_data = {
-	.power_on = cardhu_mt9d115_power_on,
-	.power_off = cardhu_mt9d115_power_off,
-};
-#endif  // CONFIG_VIDEO_YUV
-
 static const struct i2c_board_info cardhu_camera_i2c3_board_info[] = {
-#if defined(CONFIG_VIDEO_OV5640_ACER)
+#ifdef CONFIG_VIDEO_OV5640_ACER
 	{
 		I2C_BOARD_INFO("ov5640", 0x3C),
 		.platform_data = &cardhu_ov5640_data,
 	},
 #endif
-#if defined(CONFIG_VIDEO_OV9740)
+#ifdef CONFIG_VIDEO_OV9740
 	{
 		I2C_BOARD_INFO("ov9740", 0x10),
 		.platform_data = &cardhu_ov9740_data,
 	},
 #endif
-#ifdef CONFIG_VIDEO_YUV
-	{
-		I2C_BOARD_INFO("mt9d115", 0x3C),
-		.platform_data = &cardhu_mt9d115_data,
-	},
-#endif
 };
 
-#ifdef CONFIG_STK2203_LIGHT_SENSOR
 static struct i2c_board_info cardhu_i2c0_stk2203_board_info[] = {
 	{
 		I2C_BOARD_INFO("stk_als", 0x10),
@@ -287,7 +227,6 @@ static void cardhu_stk2203_init(void)
 	i2c_register_board_info(0, cardhu_i2c0_stk2203_board_info,
 		ARRAY_SIZE(cardhu_i2c0_stk2203_board_info));
 }
-#endif
 
 static struct throttle_table tj_throttle_table[] = {
 		/* CPU_THROT_LOW cannot be used by other than CPU */
@@ -317,8 +256,7 @@ static struct balanced_throttle tj_throttle = {
 
 static int __init cardhu_throttle_init(void)
 {
-	//if (machine_is_cardhu())
-		balanced_throttle_register(&tj_throttle, "tegra-balanced");
+	balanced_throttle_register(&tj_throttle, "tegra-balanced");
 		
 	return 0;
 }
@@ -329,8 +267,8 @@ static struct nct1008_platform_data cardhu_nct1008_pdata = {
 	.ext_range = true,
 	.conv_rate = 0x08,
 	.offset = 8, /* 4 * 2C. Bug 844025 - 1C for device accuracies */
-	.shutdown_ext_limit = 90,
-	.shutdown_local_limit = 90,
+	.shutdown_ext_limit = 90, /* C */
+	.shutdown_local_limit = 90, /* C */
 
 	.passive_delay = 2000,
 
@@ -358,27 +296,21 @@ static struct i2c_board_info cardhu_i2c4_nct1008_board_info[] = {
 
 static int cardhu_nct1008_init(void)
 {
-	int nct1008_port = -1;
 	int ret = 0;
 
-	nct1008_port = TEGRA_GPIO_PI3;
+	tegra_platform_edp_init(cardhu_nct1008_pdata.trips,
+				&cardhu_nct1008_pdata.num_trips,
+				0); /* edp temperature margin */
 
-	if (nct1008_port >= 0) {
-		tegra_platform_edp_init(cardhu_nct1008_pdata.trips,
-								&cardhu_nct1008_pdata.num_trips,
-								0); /* edp temperature margin */
-		cardhu_i2c4_nct1008_board_info[0].irq =
-									gpio_to_irq(nct1008_port);
+	ret = gpio_request(TEGRA_GPIO_PI3, "temp_alert");
+	if (ret < 0)
+		return ret;
 
-		ret = gpio_request(nct1008_port, "temp_alert");
-		if (ret < 0)
-			return ret;
-
-		ret = gpio_direction_input(nct1008_port);
-		if (ret < 0)
-			gpio_free(nct1008_port);
-	}
+	ret = gpio_direction_input(TEGRA_GPIO_PI3);
+	if (ret < 0)
+		gpio_free(TEGRA_GPIO_PI3);
 	
+	cardhu_i2c4_nct1008_board_info[0].irq = gpio_to_irq(TEGRA_GPIO_PI3);
 	i2c_register_board_info(4, cardhu_i2c4_nct1008_board_info,
 			ARRAY_SIZE(cardhu_i2c4_nct1008_board_info));
 
@@ -459,9 +391,7 @@ static int __init cardhu_skin_init(void)
 late_initcall(cardhu_skin_init);
 #endif
 
-
 #ifdef CONFIG_MPU_SENSORS_MPU3050
-#define SENSOR_MPU_NAME "mpu3050"
 static struct mpu_platform_data mpu_data = {
 	.int_config  = 0x10,
 	.orientation = {
@@ -469,43 +399,41 @@ static struct mpu_platform_data mpu_data = {
 		-1,  0,  0,
 		 0,  0, -1
 	},
-	/* accel */
 	.accel = {
 #ifdef CONFIG_INV_SENSORS_MODULE
-	.get_slave_descr = NULL,
+		.get_slave_descr = NULL,
 #else
-	.get_slave_descr = get_accel_slave_descr,
+		.get_slave_descr = get_accel_slave_descr,
 #endif
-	.adapt_num   = 0,
-	.bus         = EXT_SLAVE_BUS_SECONDARY,
-	.address     = 0x0F,
-	.orientation = {
-		 0, -1,  0,
-		-1,  0,  0,
-		 0,  0, -1
+		.adapt_num   = 0,
+		.bus         = EXT_SLAVE_BUS_SECONDARY,
+		.address     = 0x0F,
+		.orientation = {
+			 0, -1,  0,
+			-1,  0,  0,
+			 0,  0, -1
+		},
 	},
-	},
-	/* compass */
 	.compass = {
 #ifdef CONFIG_INV_SENSORS_MODULE
-	.get_slave_descr = NULL,
+		.get_slave_descr = NULL,
 #else
-	.get_slave_descr = get_compass_slave_descr,
+		.get_slave_descr = get_compass_slave_descr,
 #endif
-	.adapt_num   = 0,
-	.bus         = EXT_SLAVE_BUS_PRIMARY,
-	.address     = 0x0C,
-	.orientation = {
-		1,  0,  0,
-		0, -1,  0,
-		0,  0, -1
-	},
+		.adapt_num   = 0,
+		.bus         = EXT_SLAVE_BUS_PRIMARY,
+		.address     = 0x0C,
+		.orientation = {
+			1,  0,  0,
+			0, -1,  0,
+			0,  0, -1
+		},
 	},
 };
 
 static struct i2c_board_info __initdata mpu3050_i2c0_boardinfo[] = {
 	{
-		I2C_BOARD_INFO(SENSOR_MPU_NAME, 0x68),
+		I2C_BOARD_INFO("mpu3050", 0x68),
 		.platform_data = &mpu_data,
 	},
 };
@@ -534,12 +462,10 @@ static void cardhu_mpu_power_on(void)
 	}
 
 static void cardhu_mpuirq_init(void)
-	{
+{
 	int ret;
 
-	pr_info("*** MPU START *** cardhu_mpuirq_init...\n");
-
-	ret = gpio_request(GYRO_INT_R, SENSOR_MPU_NAME);
+	ret = gpio_request(GYRO_INT_R, "mpu3050");
 	if (ret < 0)
 		pr_err("%s: gpio_request failed for gpio %s\n",
 		__func__, "GYRO_INT_R");
@@ -566,8 +492,6 @@ static void cardhu_mpuirq_init(void)
 		pr_err("%s: gpio_direction_input failed for gpio %s\n",
 		__func__, "COMPASS_DRDY");
 
-	pr_info("*** MPU END *** cardhu_mpuirq_init...\n");
-
 	cardhu_mpu_power_on();
 }
 #endif
@@ -575,8 +499,6 @@ static void cardhu_mpuirq_init(void)
 int __init cardhu_sensors_init(void)
 {
 	int err;
-
-	tegra_get_board_info(&board_info);
 
 	cardhu_camera_init();
 	i2c_register_board_info(2, cardhu_camera_i2c3_board_info,
@@ -595,8 +517,8 @@ int __init cardhu_sensors_init(void)
 
 	cardhu_mpuirq_init();
 #endif
-#ifdef CONFIG_STK2203_LIGHT_SENSOR
+
         cardhu_stk2203_init();
-#endif
+
 	return 0;
 }

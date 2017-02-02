@@ -92,8 +92,6 @@
 #include <linux/leds-gpio-p2.h>
 #endif
 
-#define VIB_GPIO TEGRA_GPIO_PJ7
-
 #define DOCK_DEBUG_UART_GPIO TEGRA_GPIO_PU5
 
 #if defined(CONFIG_ACER_ES305)
@@ -147,30 +145,6 @@ static int __init hw_ver_arg(char *options)
 	return 0;
 }
 early_param("hw_ver", hw_ver_arg);
-
-void gpio_unused_init(void);
-
-static void bt_ext_gpio_init(void)
-{
-	int ret;
-
-	pr_info("%s: \n", __func__);
-
-	ret = gpio_request(TEGRA_GPIO_PP0, "bt_ext_wake");
-	if (ret)
-		pr_warn("%s : can't find bt_ext_wake gpio.\n", __func__);
-
-	/* configure ext_wake as output mode*/
-	ret = gpio_direction_output(TEGRA_GPIO_PP0, 0);
-	if (ret < 0) {
-		pr_warn("gpio-keys: failed to configure output"
-			" direction for GPIO %d, error %d\n",
-			  TEGRA_GPIO_PP0, ret);
-		gpio_free(TEGRA_GPIO_PP0);
-	}
-	gpio_set_value(TEGRA_GPIO_PP0, 0);
-	gpio_free(TEGRA_GPIO_PP0);
-}
 
 static struct resource cardhu_bcm4329_rfkill_resources[] = {
 	{
@@ -232,14 +206,13 @@ static struct platform_device cardhu_bluesleep_device = {
 	.resource       = cardhu_bluesleep_resources,
 };
 
-static noinline void __init cardhu_setup_bluesleep(void)
+static void __init cardhu_setup_bluesleep(void)
 {
-	cardhu_bluesleep_device.resource[2].start = gpio_to_irq(TEGRA_GPIO_PS7);
-	cardhu_bluesleep_device.resource[2].end = gpio_to_irq(TEGRA_GPIO_PS7);
-	platform_device_register(&cardhu_bluesleep_device);
-	bt_ext_gpio_init();
+	cardhu_bluesleep_resources[2].start =
+		cardhu_bluesleep_resources[2].end = 
+			gpio_to_irq(TEGRA_GPIO_PS7);
 
-	return;
+	platform_device_register(&cardhu_bluesleep_device);
 }
 
 static __initdata struct tegra_clk_init_table cardhu_clk_init_table[] = {
@@ -274,9 +247,10 @@ static struct at24_platform_data at24c02c = {
 	.byte_len = SZ_2K/8,
 	.page_size = 8,
 };
+
 static struct i2c_board_info __initdata cardhu_i2c_eeprom_board_info[] = {
 	{
-		I2C_BOARD_INFO("at24",0x50),
+		I2C_BOARD_INFO("at24" ,0x50),
 		.platform_data = &at24c02c,
 	},
 };
@@ -347,7 +321,7 @@ static struct i2c_board_info __initdata cardhu_codec_wm8903_info = {
 	.platform_data = &cardhu_wm8903_pdata,
 };
 
-#if defined(CONFIG_ACER_ES305)
+#ifdef CONFIG_ACER_ES305
 static struct a1026_platform_data a1026_pdata = {
 	.gpio_a1026_clk = TEGRA_GPIO_PX0,
 	.gpio_a1026_reset = TEGRA_GPIO_PN0,
@@ -481,7 +455,7 @@ static void __init cardhu_uart_init(void)
 static struct timed_gpio vib_timed_gpios[] = {
 	{
 		.name = "vibrator",
-		.gpio = VIB_GPIO,
+		.gpio = TEGRA_GPIO_PJ7,
 		.max_timeout = 10000,
 		.active_low = 0,
 	},
@@ -539,10 +513,9 @@ static void __init cardhu_spi_init(void)
 {
 	int i;
 	struct clk *c;
-	struct board_info board_info, display_board_info;
+	struct board_info board_info;
 
 	tegra_get_board_info(&board_info);
-	tegra_get_display_board_info(&display_board_info);
 
 	for (i = 0; i < ARRAY_SIZE(spi_parent_clk); ++i) {
 		c = tegra_get_clock_by_name(spi_parent_clk[i].name);
@@ -1062,7 +1035,6 @@ static void __init tegra_cardhu_init(void)
 	acer_touch_init();
 #endif
 	cardhu_gps_init();
-	cardhu_scroll_init();
 	acer_keys_init();
 	acer_panel_init();
 	cardhu_sensors_init();

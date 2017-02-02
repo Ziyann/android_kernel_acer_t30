@@ -525,7 +525,7 @@ static struct platform_device *fixed_reg_devs_acer_t30[] = {
 int __init cardhu_fixed_regulator_init(void)
 {
 	struct platform_device **fixed_reg_devs;
-	int    nfixreg_devs;
+	int nfixreg_devs;
 
 	nfixreg_devs = ARRAY_SIZE(fixed_reg_devs_acer_t30);
 	fixed_reg_devs = fixed_reg_devs_acer_t30;
@@ -569,15 +569,6 @@ static struct tegra_suspend_platform_data cardhu_suspend_data = {
 
 int __init cardhu_suspend_init(void)
 {
-	struct board_info board_info;
-	struct board_info pmu_board_info;
-
-	tegra_get_board_info(&board_info);
-	tegra_get_pmu_board_info(&pmu_board_info);
-
-	/* For PMU Fab A03, A04 and A05 make core_pwr_req to high */
-	cardhu_suspend_data.corereq_high = true;
-
 	tegra_init_suspend(&cardhu_suspend_data);
 	return 0;
 }

@@ -39,11 +39,6 @@
 #include "gpio-names.h"
 #include "devices.h"
 
-int __init cardhu_scroll_init(void)
-{
-	return 0;
-}
-
 #define GPIO_KEY(_id, _gpio, _iswake)		\
 	{					\
 		.code = _id,			\
